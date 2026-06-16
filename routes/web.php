@@ -1,0 +1,47 @@
+<?php
+
+use App\Http\Controllers\AdvanceExpenseController;
+use App\Http\Controllers\BankImportController;
+use App\Http\Controllers\JournalController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TransferJournalController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+
+Route::get('/', function (Request $request) {
+    if ($request->user()) {
+        return Inertia::render('home');
+    }
+
+    return Inertia::render('guest-landing');
+})->name('home');
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('dashboard', fn () => redirect()->route('home'))->name('dashboard');
+
+    Route::get('bank-import', [BankImportController::class, 'index'])->name('bank-import');
+    Route::post('bank-import', [BankImportController::class, 'store'])->name('bank-import.store');
+    Route::get('bank-import/{bankImport}/review', [BankImportController::class, 'review'])->name('bank-import.review');
+    Route::post('bank-import/{bankImport}/confirm', [BankImportController::class, 'confirm'])->name('bank-import.confirm');
+    Route::post('bank-import/rows/{row}/skip', [BankImportController::class, 'skipRow'])->name('bank-import.rows.skip');
+
+    Route::get('advance-expenses', [AdvanceExpenseController::class, 'index'])->name('advance-expenses');
+    Route::post('advance-expenses', [AdvanceExpenseController::class, 'store'])->name('advance-expenses.store');
+    Route::delete('advance-expenses/{journalEntry}', [AdvanceExpenseController::class, 'destroy'])->name('advance-expenses.destroy');
+
+    Route::get('reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('reports/{type}/export/{format}', [ReportController::class, 'export'])->name('reports.export');
+
+    Route::get('other', fn () => Inertia::render('other/index'))->name('other');
+
+    Route::get('other/transfer-journal', [TransferJournalController::class, 'index'])->name('transfer-journal.index');
+    Route::post('other/transfer-journal', [TransferJournalController::class, 'store'])->name('transfer-journal.store');
+    Route::delete('other/transfer-journal/{journalEntry}', [TransferJournalController::class, 'destroy'])->name('transfer-journal.destroy');
+
+    Route::get('journals', [JournalController::class, 'index'])->name('journals.index');
+});
+
+require __DIR__.'/settings.php';
+require __DIR__.'/company.php';
+require __DIR__.'/auth.php';
