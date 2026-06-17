@@ -11,6 +11,7 @@ use App\Models\BankImport;
 use App\Models\BankImportRow;
 use App\Models\Company;
 use App\Services\BankImportService;
+use App\Services\DescriptionRuleMatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -23,6 +24,7 @@ class BankImportController extends Controller
 
     public function __construct(
         private readonly BankImportService $bankImportService,
+        private readonly DescriptionRuleMatcher $ruleMatcher,
     ) {}
 
     public function index(Request $request): Response
@@ -76,14 +78,23 @@ class BankImportController extends Controller
             ->orderBy('transaction_date')
             ->orderBy('id')
             ->get()
-            ->map(fn (BankImportRow $row) => [
-                'id' => $row->id,
-                'transaction_date' => $row->transaction_date->format('Y-m-d'),
-                'description' => $row->description,
-                'deposit_amount' => $row->deposit_amount,
-                'withdrawal_amount' => $row->withdrawal_amount,
-                'is_deposit' => $row->deposit_amount > 0,
-            ]);
+            ->map(function (BankImportRow $row) use ($company) {
+                $suggestedAccountId = null;
+                if ($row->withdrawal_amount > 0) {
+                    $suggestedAccount = $this->ruleMatcher->suggestAccount($company, $row->description);
+                    $suggestedAccountId = $suggestedAccount?->id;
+                }
+
+                return [
+                    'id' => $row->id,
+                    'transaction_date' => $row->transaction_date->format('Y-m-d'),
+                    'description' => $row->description,
+                    'deposit_amount' => $row->deposit_amount,
+                    'withdrawal_amount' => $row->withdrawal_amount,
+                    'is_deposit' => $row->deposit_amount > 0,
+                    'suggested_account_id' => $suggestedAccountId,
+                ];
+            });
 
         $expenseAccounts = Account::expenseAccounts()->map(fn (Account $account) => [
             'id' => $account->id,

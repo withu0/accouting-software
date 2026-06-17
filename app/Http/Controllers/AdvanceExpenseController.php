@@ -8,6 +8,7 @@ use App\Http\Requests\StoreAdvanceExpenseRequest;
 use App\Models\Account;
 use App\Models\Company;
 use App\Models\JournalEntry;
+use App\Services\ConsumptionTaxService;
 use App\Services\JournalService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +22,7 @@ class AdvanceExpenseController extends Controller
 
     public function __construct(
         private readonly JournalService $journalService,
+        private readonly ConsumptionTaxService $consumptionTaxService,
     ) {}
 
     public function index(Request $request): Response
@@ -72,10 +74,11 @@ class AdvanceExpenseController extends Controller
             Carbon::parse($validated['entry_date']),
             $validated['description'],
             JournalSource::AdvanceExpense,
-            [
-                ['account_id' => $expenseAccount->id, 'debit' => $amount, 'credit' => 0],
-                ['account_id' => $officerLoanAccount->id, 'debit' => 0, 'credit' => $amount],
-            ],
+            $this->consumptionTaxService->buildTaxableExpenseLines(
+                $amount,
+                $expenseAccount->id,
+                $officerLoanAccount->id,
+            ),
         );
 
         return back()->with('success', '立替経費を登録しました。');

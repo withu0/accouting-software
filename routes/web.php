@@ -40,6 +40,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('other/transfer-journal/{journalEntry}', [TransferJournalController::class, 'destroy'])->name('transfer-journal.destroy');
 
     Route::get('journals', [JournalController::class, 'index'])->name('journals.index');
+    Route::delete('journals/bulk', [JournalController::class, 'destroyBulk'])->name('journals.destroy-bulk');
     Route::delete('journals/{journalEntry}', [JournalController::class, 'destroy'])->name('journals.destroy');
 });
 

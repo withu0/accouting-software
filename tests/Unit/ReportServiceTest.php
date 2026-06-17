@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\FiscalYear;
 use App\Models\JournalEntry;
 use App\Models\User;
+use App\Services\ConsumptionTaxService;
 use App\Services\ReportService;
 use Database\Seeders\AccountSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,6 +93,53 @@ class ReportServiceTest extends TestCase
         $this->assertNotNull($depositAccount);
         $this->assertSame(95000, $depositAccount['closing_balance']);
         $this->assertArrayHasKey('account_code', $depositAccount);
+    }
+
+    public function test_taxed_posting_shows_net_on_pl_and_tax_accounts_on_bs(): void
+    {
+        $user = User::factory()->create();
+        $company = Company::create(['user_id' => $user->id, 'name' => '税込テスト株式会社']);
+        $fiscalYear = FiscalYear::create([
+            'company_id' => $company->id,
+            'start_date' => '2025-04-01',
+            'end_date' => '2026-03-31',
+            'is_active' => true,
+        ]);
+
+        $consumptionTaxService = app(ConsumptionTaxService::class);
+        $deposit = Account::findByName('預金');
+        $revenue = Account::findByName('売上高');
+        $expense = Account::where('name', '会議費')->firstOrFail();
+
+        $revenueEntry = JournalEntry::create([
+            'company_id' => $company->id,
+            'fiscal_year_id' => $fiscalYear->id,
+            'entry_date' => '2025-06-01',
+            'description' => '税込売上',
+            'source' => JournalSource::BankCsv,
+        ]);
+        $revenueEntry->lines()->createMany(
+            $consumptionTaxService->buildTaxableRevenueLines(11000, $deposit->id, $revenue->id),
+        );
+
+        $expenseEntry = JournalEntry::create([
+            'company_id' => $company->id,
+            'fiscal_year_id' => $fiscalYear->id,
+            'entry_date' => '2025-06-02',
+            'description' => '税込経費',
+            'source' => JournalSource::BankCsv,
+        ]);
+        $expenseEntry->lines()->createMany(
+            $consumptionTaxService->buildTaxableExpenseLines(11000, $expense->id, $deposit->id),
+        );
+
+        $pl = $this->reportService->profitAndLoss($company, $fiscalYear);
+        $bs = $this->reportService->balanceSheet($company, $fiscalYear);
+
+        $this->assertSame(10000, collect($pl['revenue_rows'])->firstWhere('account_name', '売上高')['amount']);
+        $this->assertSame(10000, collect($pl['expense_rows'])->firstWhere('account_name', '会議費')['amount']);
+        $this->assertSame(1000, collect($bs['liability_rows'])->firstWhere('account_name', '仮受消費税')['amount']);
+        $this->assertSame(1000, collect($bs['asset_rows'])->firstWhere('account_name', '仮払消費税')['amount']);
     }
 
     private function seedSampleJournals(): void

@@ -22,6 +22,7 @@ interface ImportRow {
     deposit_amount: number;
     withdrawal_amount: number;
     is_deposit: boolean;
+    suggested_account_id?: number | null;
 }
 
 interface ImportSummary {
@@ -51,10 +52,20 @@ function formatAmount(amount: number): string {
     return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
 }
 
+function initialAccountSelections(rows: ImportRow[]): Record<number, string> {
+    const selections: Record<number, string> = {};
+    for (const row of rows) {
+        if (!row.is_deposit && row.suggested_account_id) {
+            selections[row.id] = String(row.suggested_account_id);
+        }
+    }
+    return selections;
+}
+
 export default function BankImportReview({ bankImport, rows, expenseAccounts, importSummary }: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(rows.map((r) => r.id)));
-    const [accountSelections, setAccountSelections] = useState<Record<number, string>>({});
+    const [accountSelections, setAccountSelections] = useState<Record<number, string>>(() => initialAccountSelections(rows));
 
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -203,23 +214,29 @@ export default function BankImportReview({ bankImport, rows, expenseAccounts, im
                                                     {row.is_deposit ? (
                                                         <Badge variant="secondary">売上として記帳</Badge>
                                                     ) : (
-                                                        <Select
-                                                            value={accountSelections[row.id] ?? ''}
-                                                            onValueChange={(v) => handleAccountChange(row.id, v)}
-                                                        >
-                                                            <SelectTrigger
-                                                                className={`w-48 ${missingAccountRowIds.has(row.id) ? 'border-red-500' : ''}`}
+                                                        <div className="flex flex-col gap-1">
+                                                            <Select
+                                                                value={accountSelections[row.id] ?? ''}
+                                                                onValueChange={(v) => handleAccountChange(row.id, v)}
                                                             >
-                                                                <SelectValue placeholder="経費科目を選択（必須）" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {expenseAccounts.map((account) => (
-                                                                    <SelectItem key={account.id} value={String(account.id)}>
-                                                                        {account.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                                <SelectTrigger
+                                                                    className={`w-48 ${missingAccountRowIds.has(row.id) ? 'border-red-500' : ''}`}
+                                                                >
+                                                                    <SelectValue placeholder="経費科目を選択（必須）" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {expenseAccounts.map((account) => (
+                                                                        <SelectItem key={account.id} value={String(account.id)}>
+                                                                            {account.name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            {row.suggested_account_id &&
+                                                                accountSelections[row.id] === String(row.suggested_account_id) && (
+                                                                    <span className="text-muted-foreground text-xs">自動提案</span>
+                                                                )}
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">

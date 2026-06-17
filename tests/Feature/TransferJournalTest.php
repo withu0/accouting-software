@@ -73,6 +73,7 @@ class TransferJournalTest extends TestCase
         ]);
 
         $entry = JournalEntry::where('description', '売掛金計上')->firstOrFail();
+        $this->assertCount(2, $entry->lines);
         $this->assertDatabaseHas('journal_lines', [
             'journal_entry_id' => $entry->id,
             'account_id' => $this->debitAccount->id,

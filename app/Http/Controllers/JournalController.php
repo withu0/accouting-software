@@ -66,4 +66,33 @@ class JournalController extends Controller
 
         return back()->with('success', '銀行CSV取込の仕訳を削除しました。');
     }
+
+    public function destroyBulk(Request $request): RedirectResponse
+    {
+        $company = $this->resolveCompany($request);
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'distinct'],
+        ]);
+
+        $entries = $company->journalEntries()
+            ->whereIn('id', $validated['ids'])
+            ->where('source', JournalSource::BankCsv)
+            ->get();
+
+        if ($entries->count() !== count($validated['ids'])) {
+            abort(404);
+        }
+
+        try {
+            $this->bankImportService->deletePostedJournals($company, $entries);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['journal' => $e->getMessage()]);
+        }
+
+        $count = $entries->count();
+
+        return back()->with('success', "{$count}件の銀行CSV取込仕訳を削除しました。");
+    }
 }

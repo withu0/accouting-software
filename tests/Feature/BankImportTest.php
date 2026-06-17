@@ -11,6 +11,7 @@ use App\Models\FiscalYear;
 use App\Models\JournalEntry;
 use App\Models\User;
 use Database\Seeders\AccountSeeder;
+use Database\Seeders\DescriptionRuleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -39,6 +40,8 @@ class BankImportTest extends TestCase
             'end_date' => '2026-03-31',
             'is_active' => true,
         ]);
+
+        DescriptionRuleSeeder::seedForCompany($this->company);
     }
 
     public function test_upload_csv_shows_review_page(): void
@@ -79,6 +82,7 @@ class BankImportTest extends TestCase
 
         $depositAccount = Account::where('name', '預金')->firstOrFail();
         $revenueAccount = Account::where('name', '売上高')->firstOrFail();
+        $outputTaxAccount = Account::where('name', '仮受消費税')->firstOrFail();
 
         $this->assertDatabaseHas('journal_entries', [
             'company_id' => $this->company->id,
@@ -88,6 +92,7 @@ class BankImportTest extends TestCase
 
         $entry = $this->company->journalEntries()->where('description', '振込 カ）ABC商事')->first();
         $this->assertNotNull($entry);
+        $this->assertCount(3, $entry->lines);
         $this->assertDatabaseHas('journal_lines', [
             'journal_entry_id' => $entry->id,
             'account_id' => $depositAccount->id,
@@ -98,7 +103,13 @@ class BankImportTest extends TestCase
             'journal_entry_id' => $entry->id,
             'account_id' => $revenueAccount->id,
             'debit' => 0,
-            'credit' => 100000,
+            'credit' => 90910,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $outputTaxAccount->id,
+            'debit' => 0,
+            'credit' => 9090,
         ]);
 
         $row->refresh();
@@ -120,13 +131,21 @@ class BankImportTest extends TestCase
             ->assertRedirect();
 
         $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
 
         $entry = $this->company->journalEntries()->where('description', 'Amazon.co.jp')->first();
         $this->assertNotNull($entry);
+        $this->assertCount(3, $entry->lines);
         $this->assertDatabaseHas('journal_lines', [
             'journal_entry_id' => $entry->id,
             'account_id' => $expenseAccount->id,
-            'debit' => 5000,
+            'debit' => 4546,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $inputTaxAccount->id,
+            'debit' => 454,
             'credit' => 0,
         ]);
         $this->assertDatabaseHas('journal_lines', [
@@ -163,14 +182,94 @@ class BankImportTest extends TestCase
         $this->assertEquals(2, BankImportRow::where('bank_import_id', $bankImportId)->where('status', BankImportRowStatus::Pending)->count());
     }
 
-    public function test_withdrawal_row_has_no_suggested_account_after_upload(): void
+    public function test_withdrawal_row_gets_suggested_account_after_upload(): void
     {
         $file = $this->makeCsvFile();
         $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
 
         $row = BankImportRow::where('description', 'Amazon.co.jp')->firstOrFail();
+        $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
 
+        $this->assertEquals($expenseAccount->id, $row->suggested_account_id);
+
+        $this->actingAs($this->user)
+            ->get(route('bank-import.review', $row->bank_import_id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('bank-import/review')
+                ->where('rows.1.description', 'Amazon.co.jp')
+                ->where('rows.1.suggested_account_id', $expenseAccount->id)
+            );
+    }
+
+    public function test_confirm_withdrawal_learns_rule_for_future_import(): void
+    {
+        $csv = <<<'CSV'
+日付,摘要,入金額,出金額,残高
+2025-04-10,AcmeVendor,,3000,1000000
+CSV;
+
+        $file = UploadedFile::fake()->createWithContent('learn-test.csv', $csv);
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'AcmeVendor')->firstOrFail();
         $this->assertNull($row->suggested_account_id);
+
+        $expenseAccount = Account::where('name', '外注費')->firstOrFail();
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $row->bank_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ]);
+
+        $this->assertDatabaseHas('description_rules', [
+            'company_id' => $this->company->id,
+            'keyword' => 'AcmeVendor',
+            'account_id' => $expenseAccount->id,
+        ]);
+
+        $csv2 = <<<'CSV'
+日付,摘要,入金額,出金額,残高
+2025-04-11,AcmeVendor,,4500,995500
+CSV;
+
+        $file2 = UploadedFile::fake()->createWithContent('learn-test-2.csv', $csv2);
+        $response = $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file2]);
+        $response->assertRedirect();
+
+        $newRow = BankImportRow::where('description', 'AcmeVendor')
+            ->where('status', BankImportRowStatus::Pending)
+            ->firstOrFail();
+
+        $this->assertEquals($expenseAccount->id, $newRow->suggested_account_id);
+    }
+
+    public function test_user_can_override_suggested_account_and_rule_is_updated(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'Amazon.co.jp')->firstOrFail();
+        $overrideAccount = Account::where('name', '通信費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $row->bank_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $overrideAccount->id]],
+            ]);
+
+        $csv = <<<'CSV'
+日付,摘要,入金額,出金額,残高
+2025-04-15,Amazon.co.jp,,2000,1000000
+CSV;
+
+        $file2 = UploadedFile::fake()->createWithContent('override-test.csv', $csv);
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file2]);
+
+        $newRow = BankImportRow::where('description', 'Amazon.co.jp')
+            ->where('status', BankImportRowStatus::Pending)
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertEquals($overrideAccount->id, $newRow->suggested_account_id);
     }
 
     public function test_sample_csv_files_can_be_imported(): void
@@ -335,6 +434,62 @@ class BankImportTest extends TestCase
             ->assertNotFound();
 
         $this->assertDatabaseHas('journal_entries', ['id' => $entry->id]);
+    }
+
+    public function test_bulk_delete_posted_csv_journals(): void
+    {
+        $expenseAccount = Account::expenseAccounts()->firstOrFail();
+
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $rows = BankImportRow::orderBy('id')->get();
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $rows->first()->bank_import_id), [
+                'rows' => $rows->map(fn ($row) => [
+                    'row_id' => $row->id,
+                    ...($row->withdrawal_amount > 0 ? ['account_id' => $expenseAccount->id] : []),
+                ])->all(),
+            ]);
+
+        $entries = JournalEntry::where('source', JournalSource::BankCsv)->orderBy('id')->get();
+        $this->assertGreaterThanOrEqual(2, $entries->count());
+
+        $idsToDelete = $entries->take(2)->pluck('id')->all();
+
+        $this->actingAs($this->user)
+            ->delete(route('journals.destroy-bulk'), ['ids' => $idsToDelete])
+            ->assertRedirect()
+            ->assertSessionHas('success', '2件の銀行CSV取込仕訳を削除しました。');
+
+        foreach ($idsToDelete as $id) {
+            $this->assertDatabaseMissing('journal_entries', ['id' => $id]);
+            $this->assertDatabaseMissing('journal_lines', ['journal_entry_id' => $id]);
+        }
+    }
+
+    public function test_bulk_delete_rejects_non_bank_csv_journal_ids(): void
+    {
+        $manualEntry = JournalEntry::create([
+            'company_id' => $this->company->id,
+            'fiscal_year_id' => $this->company->activeFiscalYear()->id,
+            'entry_date' => '2025-05-01',
+            'description' => '手動仕訳',
+            'source' => JournalSource::Manual,
+        ]);
+
+        $this->actingAs($this->user)
+            ->delete(route('journals.destroy-bulk'), ['ids' => [$manualEntry->id]])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('journal_entries', ['id' => $manualEntry->id]);
+    }
+
+    public function test_bulk_delete_requires_at_least_one_id(): void
+    {
+        $this->actingAs($this->user)
+            ->delete(route('journals.destroy-bulk'), ['ids' => []])
+            ->assertSessionHasErrors('ids');
     }
 
     private function makeSampleCsvFile(string $filename): UploadedFile

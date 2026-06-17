@@ -20,6 +20,8 @@ class BankImportService
     public function __construct(
         private readonly BankCsvParser $parser,
         private readonly JournalService $journalService,
+        private readonly DescriptionRuleMatcher $ruleMatcher,
+        private readonly ConsumptionTaxService $consumptionTaxService,
     ) {}
 
     /**
@@ -113,6 +115,9 @@ class BankImportService
 
         foreach ($rowsToCreate as $item) {
             $row = $item['row'];
+            $suggestedAccount = $row['withdrawal_amount'] > 0
+                ? $this->ruleMatcher->suggestAccount($company, $row['description'])
+                : null;
 
             BankImportRow::create([
                 'bank_import_id' => $bankImport->id,
@@ -123,7 +128,7 @@ class BankImportService
                 'deposit_amount' => $row['deposit_amount'],
                 'withdrawal_amount' => $row['withdrawal_amount'],
                 'balance' => $row['balance'],
-                'suggested_account_id' => null,
+                'suggested_account_id' => $suggestedAccount?->id,
                 'status' => BankImportRowStatus::Pending,
             ]);
         }
@@ -191,6 +196,10 @@ class BankImportService
                 $accountId = $confirmation['account_id'] ?? null;
                 $entry = $this->postRow($company, $row, $accountId);
 
+                if ($accountId !== null && $row->withdrawal_amount > 0) {
+                    $this->ruleMatcher->learnFromConfirmation($company, $row->description, $accountId);
+                }
+
                 $row->update([
                     'status' => BankImportRowStatus::Confirmed,
                     'journal_entry_id' => $entry->id,
@@ -211,17 +220,38 @@ class BankImportService
             throw new InvalidArgumentException('Only bank CSV journal entries can be deleted through this action.');
         }
 
-        DB::transaction(function () use ($entry) {
-            $row = BankImportRow::where('journal_entry_id', $entry->id)->first();
+        DB::transaction(fn () => $this->deletePostedJournalEntry($entry));
+    }
 
-            if ($row !== null) {
-                $bankImport = $row->bankImport;
-                $row->delete();
-                $this->updateImportStatus($bankImport);
+    /**
+     * @param  iterable<JournalEntry>  $entries
+     */
+    public function deletePostedJournals(Company $company, iterable $entries): void
+    {
+        foreach ($entries as $entry) {
+            if ($entry->company_id !== $company->id || $entry->source !== JournalSource::BankCsv) {
+                throw new InvalidArgumentException('Only bank CSV journal entries can be deleted through this action.');
             }
+        }
 
-            $entry->delete();
+        DB::transaction(function () use ($entries) {
+            foreach ($entries as $entry) {
+                $this->deletePostedJournalEntry($entry);
+            }
         });
+    }
+
+    private function deletePostedJournalEntry(JournalEntry $entry): void
+    {
+        $row = BankImportRow::where('journal_entry_id', $entry->id)->first();
+
+        if ($row !== null) {
+            $bankImport = $row->bankImport;
+            $row->delete();
+            $this->updateImportStatus($bankImport);
+        }
+
+        $entry->delete();
     }
 
     public function skipRow(Company $company, BankImportRow $row): void
@@ -260,10 +290,11 @@ class BankImportService
                 Carbon::parse($row->transaction_date),
                 $row->description,
                 JournalSource::BankCsv,
-                [
-                    ['account_id' => $depositAccount->id, 'debit' => $row->deposit_amount, 'credit' => 0],
-                    ['account_id' => $revenueAccount->id, 'debit' => 0, 'credit' => $row->deposit_amount],
-                ],
+                $this->consumptionTaxService->buildTaxableRevenueLines(
+                    $row->deposit_amount,
+                    $depositAccount->id,
+                    $revenueAccount->id,
+                ),
                 $idempotencyKey,
             );
         }
@@ -282,10 +313,11 @@ class BankImportService
             Carbon::parse($row->transaction_date),
             $row->description,
             JournalSource::BankCsv,
-            [
-                ['account_id' => $expenseAccountId, 'debit' => $row->withdrawal_amount, 'credit' => 0],
-                ['account_id' => $depositAccount->id, 'debit' => 0, 'credit' => $row->withdrawal_amount],
-            ],
+            $this->consumptionTaxService->buildTaxableExpenseLines(
+                $row->withdrawal_amount,
+                $expenseAccountId,
+                $depositAccount->id,
+            ),
             $idempotencyKey,
         );
     }

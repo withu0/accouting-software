@@ -52,6 +52,7 @@ class AdvanceExpenseTest extends TestCase
     public function test_create_posts_balanced_advance_expense_journal(): void
     {
         $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
+        $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
 
         $this->actingAs($this->user)
             ->post(route('advance-expenses.store'), [
@@ -69,10 +70,17 @@ class AdvanceExpenseTest extends TestCase
         ]);
 
         $entry = JournalEntry::where('description', '会議費用')->firstOrFail();
+        $this->assertCount(3, $entry->lines);
         $this->assertDatabaseHas('journal_lines', [
             'journal_entry_id' => $entry->id,
             'account_id' => $this->expenseAccount->id,
-            'debit' => 5000,
+            'debit' => 4546,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $inputTaxAccount->id,
+            'debit' => 454,
             'credit' => 0,
         ]);
         $this->assertDatabaseHas('journal_lines', [
