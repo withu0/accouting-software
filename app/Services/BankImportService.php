@@ -19,7 +19,6 @@ class BankImportService
 {
     public function __construct(
         private readonly BankCsvParser $parser,
-        private readonly DescriptionRuleMatcher $ruleMatcher,
         private readonly JournalService $journalService,
     ) {}
 
@@ -29,6 +28,8 @@ class BankImportService
      *     total: int,
      *     new: int,
      *     duplicates: int,
+     *     out_of_period: int,
+     *     resumed?: bool,
      * }
      */
     public function import(Company $company, UploadedFile $file): array
@@ -40,19 +41,21 @@ class BankImportService
 
         $parsedRows = $this->parser->parse($file->get());
 
-        $bankImport = BankImport::create([
-            'company_id' => $company->id,
-            'fiscal_year_id' => $fiscalYear->id,
-            'original_filename' => $file->getClientOriginalName(),
-            'status' => BankImportStatus::Pending,
-            'row_count' => count($parsedRows),
-            'imported_at' => now(),
-        ]);
-
         $newCount = 0;
         $duplicateCount = 0;
+        $outOfPeriodCount = 0;
+        $rowsToCreate = [];
+        $resumableImportIds = [];
 
         foreach ($parsedRows as $row) {
+            $transactionDate = $row['transaction_date'];
+
+            if ($transactionDate->lt($fiscalYear->start_date) || $transactionDate->gt($fiscalYear->end_date)) {
+                $outOfPeriodCount++;
+
+                continue;
+            }
+
             $existingRow = BankImportRow::where('company_id', $company->id)
                 ->where('row_hash', $row['row_hash'])
                 ->first();
@@ -60,14 +63,56 @@ class BankImportService
             if ($existingRow !== null) {
                 $duplicateCount++;
 
+                if ($existingRow->status === BankImportRowStatus::Pending) {
+                    $resumableImportIds[$existingRow->bank_import_id] = ($resumableImportIds[$existingRow->bank_import_id] ?? 0) + 1;
+                }
+
                 continue;
             }
 
-            $suggestedAccountId = null;
-            if ($row['withdrawal_amount'] > 0) {
-                $suggested = $this->ruleMatcher->suggestAccount($company, $row['description']);
-                $suggestedAccountId = $suggested?->id;
+            $rowsToCreate[] = [
+                'row' => $row,
+            ];
+            $newCount++;
+        }
+
+        if ($newCount === 0) {
+            $importableRowCount = count($parsedRows) - $outOfPeriodCount;
+
+            if ($importableRowCount > 0 && $duplicateCount === $importableRowCount) {
+                $resumableImportId = $this->resolveResumableImportId($resumableImportIds);
+
+                if ($resumableImportId !== null) {
+                    return [
+                        'import' => BankImport::findOrFail($resumableImportId),
+                        'total' => count($parsedRows),
+                        'new' => 0,
+                        'duplicates' => $duplicateCount,
+                        'out_of_period' => $outOfPeriodCount,
+                        'resumed' => true,
+                    ];
+                }
             }
+
+            throw new InvalidArgumentException($this->buildImportRejectionMessage(
+                $fiscalYear->start_date->format('Y-m-d'),
+                $fiscalYear->end_date->format('Y-m-d'),
+                $duplicateCount,
+                $outOfPeriodCount,
+            ));
+        }
+
+        $bankImport = BankImport::create([
+            'company_id' => $company->id,
+            'fiscal_year_id' => $fiscalYear->id,
+            'original_filename' => $file->getClientOriginalName(),
+            'status' => BankImportStatus::Pending,
+            'row_count' => $newCount,
+            'imported_at' => now(),
+        ]);
+
+        foreach ($rowsToCreate as $item) {
+            $row = $item['row'];
 
             BankImportRow::create([
                 'bank_import_id' => $bankImport->id,
@@ -78,11 +123,9 @@ class BankImportService
                 'deposit_amount' => $row['deposit_amount'],
                 'withdrawal_amount' => $row['withdrawal_amount'],
                 'balance' => $row['balance'],
-                'suggested_account_id' => $suggestedAccountId,
+                'suggested_account_id' => null,
                 'status' => BankImportRowStatus::Pending,
             ]);
-
-            $newCount++;
         }
 
         return [
@@ -90,7 +133,43 @@ class BankImportService
             'total' => count($parsedRows),
             'new' => $newCount,
             'duplicates' => $duplicateCount,
+            'out_of_period' => $outOfPeriodCount,
         ];
+    }
+
+    private function buildImportRejectionMessage(
+        string $fiscalYearStart,
+        string $fiscalYearEnd,
+        int $duplicateCount,
+        int $outOfPeriodCount,
+    ): string {
+        if ($duplicateCount > 0 && $outOfPeriodCount === 0) {
+            return 'すべての取引は既に取込済みです。同じCSVを再度アップロードすることはできません。';
+        }
+
+        if ($outOfPeriodCount > 0 && $duplicateCount === 0) {
+            return "CSVの取引日が会計期間（{$fiscalYearStart} 〜 {$fiscalYearEnd}）外のため取込できません。会計期間設定を確認してください。";
+        }
+
+        if ($duplicateCount > 0 && $outOfPeriodCount > 0) {
+            return "取込可能な取引がありません。{$duplicateCount}件は既に取込済み、{$outOfPeriodCount}件は会計期間（{$fiscalYearStart} 〜 {$fiscalYearEnd}）外です。";
+        }
+
+        return '取込可能な取引がありません。';
+    }
+
+    /**
+     * @param  array<int, int>  $resumableImportIds
+     */
+    private function resolveResumableImportId(array $resumableImportIds): ?int
+    {
+        if ($resumableImportIds === []) {
+            return null;
+        }
+
+        arsort($resumableImportIds);
+
+        return array_key_first($resumableImportIds);
     }
 
     /**
@@ -117,10 +196,6 @@ class BankImportService
                     'journal_entry_id' => $entry->id,
                 ]);
 
-                if ($row->withdrawal_amount > 0 && $accountId !== null) {
-                    $this->ruleMatcher->learnFromConfirmation($company, $row->description, $accountId);
-                }
-
                 $confirmed++;
             }
 
@@ -128,6 +203,25 @@ class BankImportService
         });
 
         return ['confirmed' => $confirmed, 'skipped' => 0];
+    }
+
+    public function deletePostedJournal(Company $company, JournalEntry $entry): void
+    {
+        if ($entry->company_id !== $company->id || $entry->source !== JournalSource::BankCsv) {
+            throw new InvalidArgumentException('Only bank CSV journal entries can be deleted through this action.');
+        }
+
+        DB::transaction(function () use ($entry) {
+            $row = BankImportRow::where('journal_entry_id', $entry->id)->first();
+
+            if ($row !== null) {
+                $bankImport = $row->bankImport;
+                $row->delete();
+                $this->updateImportStatus($bankImport);
+            }
+
+            $entry->delete();
+        });
     }
 
     public function skipRow(Company $company, BankImportRow $row): void

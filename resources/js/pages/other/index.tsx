@@ -2,8 +2,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { Calendar, Receipt } from 'lucide-react';
-// import { FileSpreadsheet, Landmark } from 'lucide-react';
+import { Calendar, FileSpreadsheet, Receipt } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'ホーム', href: route('home') },
@@ -18,21 +17,13 @@ const menuItems = [
         href: route('transfer-journal.index'),
         disabled: false,
     },
-    // Post-MVP — re-enable when implemented
-    // {
-    //     title: '固定資産登録',
-    //     description: '固定資産台帳の管理（今後対応予定）',
-    //     icon: Landmark,
-    //     href: null,
-    //     disabled: true,
-    // },
-    // {
-    //     title: '勘定科目設定',
-    //     description: '利用可能な勘定科目の確認（今後対応予定）',
-    //     icon: FileSpreadsheet,
-    //     href: null,
-    //     disabled: true,
-    // },
+    {
+        title: '勘定科目設定',
+        description: '仕訳で使用する勘定科目の追加・編集・削除',
+        icon: FileSpreadsheet,
+        href: route('accounts.edit'),
+        disabled: false,
+    },
     {
         title: '会計期間設定',
         description: '会計年度の開始日・終了日を設定します',

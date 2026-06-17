@@ -10,8 +10,7 @@ import {
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { Link, usePage } from '@inertiajs/react';
-import { Calendar, ChevronRight, List, Receipt, Settings } from 'lucide-react';
-// import { FileSpreadsheet, Landmark } from 'lucide-react';
+import { Calendar, ChevronRight, FileSpreadsheet, List, Receipt, Settings } from 'lucide-react';
 
 // Post-MVP placeholders — re-enable when implemented
 // const disabledItems = [
@@ -21,6 +20,7 @@ import { Calendar, ChevronRight, List, Receipt, Settings } from 'lucide-react';
 
 const enabledItems = [
     { title: '臨時仕訳（振替伝票）', url: route('transfer-journal.index'), icon: Receipt },
+    { title: '勘定科目設定', url: route('accounts.edit'), icon: FileSpreadsheet },
     { title: '会計期間設定', url: route('fiscal-year.edit'), icon: Calendar },
     { title: '仕訳一覧', url: route('journals.index'), icon: List },
 ];

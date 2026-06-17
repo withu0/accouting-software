@@ -45,16 +45,25 @@ class BankImportController extends Controller
         try {
             $result = $this->bankImportService->import($company, $request->file('file'));
         } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['file' => $e->getMessage()]);
+            return redirect()
+                ->route('bank-import')
+                ->withErrors(['file' => $e->getMessage()]);
         }
 
-        return redirect()
+        $redirect = redirect()
             ->route('bank-import.review', $result['import'])
             ->with('importSummary', [
                 'total' => $result['total'],
                 'new' => $result['new'],
                 'duplicates' => $result['duplicates'],
+                'out_of_period' => $result['out_of_period'],
             ]);
+
+        if ($result['resumed'] ?? false) {
+            $redirect->with('success', '未完了の取込があります。記帳を続けてください。');
+        }
+
+        return $redirect;
     }
 
     public function review(Request $request, BankImport $bankImport): Response
@@ -74,7 +83,6 @@ class BankImportController extends Controller
                 'deposit_amount' => $row->deposit_amount,
                 'withdrawal_amount' => $row->withdrawal_amount,
                 'is_deposit' => $row->deposit_amount > 0,
-                'suggested_account_id' => $row->suggested_account_id,
             ]);
 
         $expenseAccounts = Account::expenseAccounts()->map(fn (Account $account) => [

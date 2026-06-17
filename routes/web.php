@@ -40,6 +40,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('other/transfer-journal/{journalEntry}', [TransferJournalController::class, 'destroy'])->name('transfer-journal.destroy');
 
     Route::get('journals', [JournalController::class, 'index'])->name('journals.index');
+    Route::delete('journals/{journalEntry}', [JournalController::class, 'destroy'])->name('journals.destroy');
 });
 
 require __DIR__.'/settings.php';

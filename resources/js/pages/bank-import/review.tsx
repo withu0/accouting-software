@@ -22,13 +22,13 @@ interface ImportRow {
     deposit_amount: number;
     withdrawal_amount: number;
     is_deposit: boolean;
-    suggested_account_id: number | null;
 }
 
 interface ImportSummary {
     total: number;
     new: number;
     duplicates: number;
+    out_of_period?: number;
 }
 
 interface Props {
@@ -54,15 +54,7 @@ function formatAmount(amount: number): string {
 export default function BankImportReview({ bankImport, rows, expenseAccounts, importSummary }: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(rows.map((r) => r.id)));
-    const [accountSelections, setAccountSelections] = useState<Record<number, string>>(() => {
-        const initial: Record<number, string> = {};
-        rows.forEach((row) => {
-            if (!row.is_deposit && row.suggested_account_id) {
-                initial[row.id] = String(row.suggested_account_id);
-            }
-        });
-        return initial;
-    });
+    const [accountSelections, setAccountSelections] = useState<Record<number, string>>({});
 
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -148,6 +140,8 @@ export default function BankImportReview({ bankImport, rows, expenseAccounts, im
                         <span>
                             {importSummary.total}件中 {importSummary.new}件を取込
                             {importSummary.duplicates > 0 && `（${importSummary.duplicates}件は重複のためスキップ）`}
+                            {(importSummary.out_of_period ?? 0) > 0 &&
+                                `（${importSummary.out_of_period}件は会計期間外のためスキップ）`}
                         </span>
                     </div>
                 )}

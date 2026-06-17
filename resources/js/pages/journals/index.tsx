@@ -1,9 +1,19 @@
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
-import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { FileText } from 'lucide-react';
+import { type BreadcrumbItem, type SharedData } from '@/types';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { CheckCircle2, FileText, Trash2 } from 'lucide-react';
 
 interface JournalEntry {
     id: number;
@@ -43,6 +53,8 @@ function formatAmount(amount: number): string {
 }
 
 export default function JournalsIndex({ entries }: Props) {
+    const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="仕訳一覧" />
@@ -51,6 +63,13 @@ export default function JournalsIndex({ entries }: Props) {
                     <h1 className="text-2xl font-semibold tracking-tight">仕訳一覧</h1>
                     <p className="text-muted-foreground mt-1 text-sm">登録済みの仕訳を確認できます</p>
                 </div>
+
+                {flash?.success && (
+                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+                        <CheckCircle2 className="size-4" />
+                        <AlertDescription>{flash.success}</AlertDescription>
+                    </Alert>
+                )}
 
                 {entries.data.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
@@ -69,6 +88,7 @@ export default function JournalsIndex({ entries }: Props) {
                                         <th className="px-4 py-3 text-left font-medium">摘要</th>
                                         <th className="px-4 py-3 text-left font-medium">ソース</th>
                                         <th className="px-4 py-3 text-right font-medium">金額</th>
+                                        <th className="px-4 py-3 text-right font-medium">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -81,6 +101,41 @@ export default function JournalsIndex({ entries }: Props) {
                                             </td>
                                             <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
                                                 {formatAmount(entry.total_amount)}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {entry.source === 'bank_csv' ? (
+                                                    <Dialog>
+                                                        <DialogTrigger asChild>
+                                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                                                <Trash2 className="size-4" />
+                                                            </Button>
+                                                        </DialogTrigger>
+                                                        <DialogContent>
+                                                            <DialogTitle>仕訳を削除しますか？</DialogTitle>
+                                                            <DialogDescription>
+                                                                {formatDate(entry.entry_date)} — {entry.description}（
+                                                                {formatAmount(entry.total_amount)}）を削除します。同じCSV行を再度取込できるようになります。
+                                                            </DialogDescription>
+                                                            <DialogFooter>
+                                                                <DialogClose asChild>
+                                                                    <Button variant="outline">キャンセル</Button>
+                                                                </DialogClose>
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    onClick={() => {
+                                                                        router.delete(route('journals.destroy', entry.id), {
+                                                                            preserveScroll: true,
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    削除する
+                                                                </Button>
+                                                            </DialogFooter>
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">—</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}
