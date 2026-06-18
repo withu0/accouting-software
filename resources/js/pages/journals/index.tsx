@@ -36,6 +36,8 @@ interface JournalEntry {
     description: string;
     source: string;
     total_amount: number;
+    debit_account_name: string;
+    credit_account_name: string;
     bank_csv_edit?: BankCsvEditMeta;
 }
 
@@ -179,6 +181,7 @@ export default function JournalsIndex({ entries, accountGroups, hasActiveFiscalY
                                         )}
                                         <th className="px-4 py-3 text-left font-medium">日付</th>
                                         <th className="px-4 py-3 text-left font-medium">摘要</th>
+                                        <th className="px-4 py-3 text-left font-medium">勘定科目</th>
                                         <th className="px-4 py-3 text-left font-medium">ソース</th>
                                         <th className="px-4 py-3 text-right font-medium">金額</th>
                                         <th className="px-4 py-3 text-right font-medium">操作</th>
@@ -199,6 +202,10 @@ export default function JournalsIndex({ entries, accountGroups, hasActiveFiscalY
                                             )}
                                             <td className="px-4 py-3 whitespace-nowrap">{formatDate(entry.entry_date)}</td>
                                             <td className="px-4 py-3">{entry.description}</td>
+                                            <td className="px-4 py-3">
+                                                <span className="block">借 {entry.debit_account_name}</span>
+                                                <span className="text-muted-foreground block">貸 {entry.credit_account_name}</span>
+                                            </td>
                                             <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
                                                 {sourceLabels[entry.source] ?? entry.source}
                                             </td>

@@ -772,4 +772,36 @@ CSV;
 
         return UploadedFile::fake()->createWithContent('mock-bank.csv', $content);
     }
+
+    /**
+     * @return array<string, array{0: string, 1: int, 2: string}>
+     */
+    public static function bankSampleFileProvider(): array
+    {
+        return [
+            'native april' => ['native-2025-04.csv', 5, 'native'],
+            'gmo native april' => ['gmo-native-2025-04.csv', 5, 'gmo_native'],
+            'rakuten april' => ['rakuten-2025-04.csv', 5, 'rakuten'],
+            'sbi april' => ['sbi-2025-04.csv', 5, 'sbi_sumishin'],
+            'gmo zengin csv april' => ['gmo-zengin-csv-2025-04.csv', 5, 'gmo_zengin_csv'],
+            'gmo zengin fixed april' => ['gmo-zengin-fixed-2025-04.txt', 5, 'gmo_zengin_fixed'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('bankSampleFileProvider')]
+    public function test_uploads_multi_bank_sample_files(string $filename, int $expectedRows, string $expectedFormat): void
+    {
+        $content = file_get_contents(base_path("samples/bank-csv-samples/{$filename}"));
+        $file = UploadedFile::fake()->createWithContent($filename, $content);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('bank-import.store'), ['file' => $file]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseCount('bank_import_rows', $expectedRows);
+        $this->assertDatabaseHas('bank_imports', [
+            'company_id' => $this->company->id,
+            'detected_format' => $expectedFormat,
+        ]);
+    }
 }

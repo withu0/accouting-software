@@ -74,7 +74,7 @@ export default function BankImportIndex({ hasActiveFiscalYear }: Props) {
                             CSVファイルをアップロード
                         </CardTitle>
                         <CardDescription>
-                            日付・摘要・入金額・出金額・残高の形式のCSVファイルを選択してください
+                            GMOあおぞら・楽天銀行・住信SBIネット銀行など主要銀行のCSVを自動判別して取り込みます
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

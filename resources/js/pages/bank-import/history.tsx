@@ -10,6 +10,7 @@ import { CheckCircle2, History, Upload } from 'lucide-react';
 interface ImportRecord {
     id: number;
     original_filename: string;
+    detected_format?: string | null;
     status: string;
     row_count: number;
     confirmed_count: number;
@@ -99,6 +100,7 @@ export default function BankImportHistory({ imports }: Props) {
                                     <tr className="bg-muted/50 border-b">
                                         <th className="px-4 py-3 text-left font-medium">取込日時</th>
                                         <th className="px-4 py-3 text-left font-medium">ファイル名</th>
+                                        <th className="px-4 py-3 text-left font-medium">形式</th>
                                         <th className="px-4 py-3 text-left font-medium">状態</th>
                                         <th className="px-4 py-3 text-right font-medium">件数</th>
                                         <th className="px-4 py-3 text-right font-medium">操作</th>
@@ -109,6 +111,9 @@ export default function BankImportHistory({ imports }: Props) {
                                         <tr key={record.id} className="border-b last:border-b-0">
                                             <td className="px-4 py-3 whitespace-nowrap">{record.imported_at}</td>
                                             <td className="px-4 py-3">{record.original_filename}</td>
+                                            <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
+                                                {record.detected_format ?? '—'}
+                                            </td>
                                             <td className="px-4 py-3">
                                                 <Badge variant={statusVariant(record.status)}>
                                                     {statusLabels[record.status] ?? record.status}

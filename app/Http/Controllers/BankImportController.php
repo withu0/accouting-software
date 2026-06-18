@@ -61,6 +61,9 @@ class BankImportController extends Controller
                 'new' => $result['new'],
                 'duplicates' => $result['duplicates'],
                 'out_of_period' => $result['out_of_period'],
+                'detected_format' => isset($result['detected_format'])
+                    ? $result['detected_format']->label()
+                    : null,
             ]);
 
         if ($result['resumed'] ?? false) {
@@ -187,6 +190,7 @@ class BankImportController extends Controller
             ->through(fn (BankImport $import) => [
                 'id' => $import->id,
                 'original_filename' => $import->original_filename,
+                'detected_format' => $import->detected_format?->label(),
                 'status' => $import->status->value,
                 'row_count' => $import->row_count,
                 'confirmed_count' => $import->confirmed_count,

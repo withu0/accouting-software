@@ -29,7 +29,7 @@ class JournalController extends Controller
         $activeFiscalYear = $company->activeFiscalYear();
 
         $query = $company->journalEntries()
-            ->with(['lines', 'bankImportRow'])
+            ->with(['lines.account', 'bankImportRow'])
             ->orderByDesc('entry_date')
             ->orderByDesc('id');
 
@@ -46,6 +46,8 @@ class JournalController extends Controller
                 'description' => $entry->description,
                 'source' => $entry->source->value,
                 'total_amount' => $entry->lines->sum('debit'),
+                'debit_account_name' => $entry->lines->first(fn ($line) => $line->debit > 0)?->account?->name ?? '',
+                'credit_account_name' => $entry->lines->first(fn ($line) => $line->credit > 0)?->account?->name ?? '',
             ];
 
             if ($entry->source === JournalSource::BankCsv && $entry->bankImportRow !== null) {

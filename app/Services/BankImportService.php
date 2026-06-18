@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\BankImportRowStatus;
 use App\Enums\BankImportStatus;
+use App\Enums\BankCsvFormat;
 use App\Enums\JournalSource;
 use App\Models\Account;
 use App\Models\BankImport;
@@ -31,6 +32,7 @@ class BankImportService
      *     new: int,
      *     duplicates: int,
      *     out_of_period: int,
+     *     detected_format?: BankCsvFormat,
      *     resumed?: bool,
      * }
      */
@@ -41,7 +43,9 @@ class BankImportService
             throw new InvalidArgumentException('No active fiscal year configured for this company.');
         }
 
-        $parsedRows = $this->parser->parse($file->get());
+        $parseResult = $this->parser->parse($file->get());
+        $parsedRows = $parseResult['rows'];
+        $detectedFormat = $parseResult['format'];
 
         $newCount = 0;
         $duplicateCount = 0;
@@ -108,6 +112,7 @@ class BankImportService
             'company_id' => $company->id,
             'fiscal_year_id' => $fiscalYear->id,
             'original_filename' => $file->getClientOriginalName(),
+            'detected_format' => $detectedFormat->value,
             'status' => BankImportStatus::Pending,
             'row_count' => $newCount,
             'imported_at' => now(),
@@ -139,6 +144,7 @@ class BankImportService
             'new' => $newCount,
             'duplicates' => $duplicateCount,
             'out_of_period' => $outOfPeriodCount,
+            'detected_format' => $detectedFormat,
         ];
     }
 

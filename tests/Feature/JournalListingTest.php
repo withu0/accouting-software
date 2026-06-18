@@ -123,6 +123,8 @@ class JournalListingTest extends TestCase
                 ->has('entries.data', 1)
                 ->where('entries.data.0.description', '売上入金')
                 ->where('entries.data.0.total_amount', 100000)
+                ->where('entries.data.0.debit_account_name', '預金')
+                ->where('entries.data.0.credit_account_name', '売上高')
             );
     }
 }

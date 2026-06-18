@@ -2,7 +2,11 @@
 
 namespace Tests\Unit;
 
-use App\Services\BankCsvParser;
+use App\Enums\BankCsvFormat;
+use App\Services\BankCsv\BankCsvEncodingNormalizer;
+use App\Services\BankCsv\BankCsvFormatDetector;
+use App\Services\BankCsv\BankCsvParser;
+use App\Services\BankCsv\Support\BankCsvRowBuilder;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -13,7 +17,13 @@ class BankCsvParserTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->parser = new BankCsvParser;
+
+        $builder = new BankCsvRowBuilder;
+        $this->parser = new BankCsvParser(
+            new BankCsvEncodingNormalizer,
+            new BankCsvFormatDetector($builder),
+            $builder,
+        );
     }
 
     public function test_parses_valid_csv(): void
@@ -24,8 +34,10 @@ class BankCsvParserTest extends TestCase
 2025-04-02,Amazon.co.jp,,5000,1495000
 CSV;
 
-        $rows = $this->parser->parse($csv);
+        $result = $this->parser->parse($csv);
 
+        $this->assertSame(BankCsvFormat::Native, $result['format']);
+        $rows = $result['rows'];
         $this->assertCount(2, $rows);
         $this->assertEquals('2025-04-01', $rows[0]['transaction_date']->format('Y-m-d'));
         $this->assertEquals('振込 カ）ABC商事', $rows[0]['description']);
@@ -39,12 +51,12 @@ CSV;
         $this->assertEquals(0, $rows[1]['deposit_amount']);
     }
 
-    public function test_rejects_missing_header(): void
+    public function test_rejects_unrecognized_format(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('CSV is missing required header');
+        $this->expectExceptionMessage('対応していないCSV形式です');
 
-        $this->parser->parse("日付,摘要,入金額\n2025-04-01,test,1000");
+        $this->parser->parse("foo,bar,baz\n1,2,3");
     }
 
     public function test_rejects_both_amounts_set(): void

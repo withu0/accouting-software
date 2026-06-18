@@ -33,6 +33,7 @@ interface ImportSummary {
     new: number;
     duplicates: number;
     out_of_period?: number;
+    detected_format?: string | null;
 }
 
 interface Props {
@@ -160,6 +161,9 @@ export default function BankImportReview({
 
                 {importSummary && (
                     <div className="bg-muted/50 rounded-lg border px-4 py-3 text-sm">
+                        {importSummary.detected_format && (
+                            <p className="mb-1 font-medium">判別形式: {importSummary.detected_format}</p>
+                        )}
                         <span>
                             {importSummary.total}件中 {importSummary.new}件を取込
                             {importSummary.duplicates > 0 && `（${importSummary.duplicates}件は重複のためスキップ）`}
