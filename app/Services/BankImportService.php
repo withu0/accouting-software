@@ -191,7 +191,11 @@ class BankImportService
                     ->where('company_id', $company->id)
                     ->where('id', $confirmation['row_id'])
                     ->where('status', BankImportRowStatus::Pending)
-                    ->firstOrFail();
+                    ->first();
+
+                if ($row === null) {
+                    throw new InvalidArgumentException('選択した取引は既に記帳済みか、無効です。ページを更新してから再度お試しください。');
+                }
 
                 $accountId = $confirmation['account_id'] ?? null;
                 $entry = $this->postRow($company, $row, $accountId);

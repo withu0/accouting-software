@@ -12,6 +12,7 @@ use App\Models\BankImportRow;
 use App\Models\Company;
 use App\Services\BankImportService;
 use App\Services\DescriptionRuleMatcher;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -121,6 +122,8 @@ class BankImportController extends Controller
             $this->bankImportService->confirmRows($company, $bankImport, $request->validated('rows'));
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['rows' => $e->getMessage()]);
+        } catch (ModelNotFoundException $e) {
+            return back()->withErrors(['rows' => '記帳に必要な勘定科目が見つかりません。']);
         }
 
         $pendingCount = $bankImport->rows()->where('status', BankImportRowStatus::Pending)->count();

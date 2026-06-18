@@ -25,10 +25,7 @@ class ConfirmBankImportRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            $company = $this->user()?->company;
-            if ($company === null) {
-                return;
-            }
+            $company = $this->user()?->ensureCompany();
 
             $bankImport = $this->route('bankImport');
             $expenseAccountIds = Account::expenseAccounts()->pluck('id')->all();

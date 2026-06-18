@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Account;
+use InvalidArgumentException;
 
 class ConsumptionTaxService
 {
@@ -29,7 +30,7 @@ class ConsumptionTaxService
     public function buildTaxableRevenueLines(int $gross, int $depositAccountId, int $revenueAccountId): array
     {
         $split = $this->splitInclusive($gross);
-        $outputTaxAccount = Account::findByName('仮受消費税');
+        $outputTaxAccount = $this->requireAccount('仮受消費税');
 
         return [
             ['account_id' => $depositAccountId, 'debit' => $gross, 'credit' => 0],
@@ -44,12 +45,23 @@ class ConsumptionTaxService
     public function buildTaxableExpenseLines(int $gross, int $expenseAccountId, int $creditAccountId): array
     {
         $split = $this->splitInclusive($gross);
-        $inputTaxAccount = Account::findByName('仮払消費税');
+        $inputTaxAccount = $this->requireAccount('仮払消費税');
 
         return [
             ['account_id' => $expenseAccountId, 'debit' => $split['net'], 'credit' => 0],
             ['account_id' => $inputTaxAccount->id, 'debit' => $split['tax'], 'credit' => 0],
             ['account_id' => $creditAccountId, 'debit' => 0, 'credit' => $gross],
         ];
+    }
+
+    private function requireAccount(string $name): Account
+    {
+        $account = Account::where('name', $name)->first();
+
+        if ($account === null) {
+            throw new InvalidArgumentException("勘定科目「{$name}」が登録されていません。勘定科目設定を確認してください。");
+        }
+
+        return $account;
     }
 }
