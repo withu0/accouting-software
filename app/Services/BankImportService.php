@@ -272,6 +272,108 @@ class BankImportService
         $this->updateImportStatus($row->bankImport);
     }
 
+    /**
+     * @param  array{transaction_date: string, description: string, amount: int, account_id: int}  $data
+     */
+    public function updateRow(Company $company, BankImportRow $row, array $data): void
+    {
+        if ($row->company_id !== $company->id) {
+            throw new InvalidArgumentException('Row does not belong to this company.');
+        }
+
+        if ($row->status === BankImportRowStatus::Skipped) {
+            throw new InvalidArgumentException('Skipped rows cannot be edited.');
+        }
+
+        $isDeposit = $row->deposit_amount > 0;
+
+        $fiscalYear = $company->activeFiscalYear();
+        if ($fiscalYear === null) {
+            throw new InvalidArgumentException('No active fiscal year configured for this company.');
+        }
+
+        $entryDate = Carbon::parse($data['transaction_date']);
+        if ($entryDate->lt($fiscalYear->start_date) || $entryDate->gt($fiscalYear->end_date)) {
+            throw new InvalidArgumentException('日付は会計期間内である必要があります。');
+        }
+
+        $amount = (int) $data['amount'];
+        if ($amount <= 0) {
+            throw new InvalidArgumentException('金額は1以上である必要があります。');
+        }
+
+        $accountId = (int) $data['account_id'];
+
+        if (Account::where('id', $accountId)->doesntExist()) {
+            throw new InvalidArgumentException('Invalid account selected.');
+        }
+
+        $rowUpdates = [
+            'transaction_date' => $entryDate,
+            'description' => $data['description'],
+            'deposit_amount' => $isDeposit ? $amount : 0,
+            'withdrawal_amount' => $isDeposit ? 0 : $amount,
+        ];
+
+        if ($row->status === BankImportRowStatus::Pending) {
+            $row->update($rowUpdates);
+
+            return;
+        }
+
+        $entry = JournalEntry::where('id', $row->journal_entry_id)
+            ->where('company_id', $company->id)
+            ->first();
+
+        if ($entry === null) {
+            throw new InvalidArgumentException('Linked journal entry not found.');
+        }
+
+        $previousAccountId = $this->resolveCounterAccountId($entry, $row);
+        $depositAccount = Account::findByName('預金');
+
+        $lines = $isDeposit
+            ? $this->consumptionTaxService->buildTaxableRevenueLines($amount, $depositAccount->id, $accountId)
+            : $this->consumptionTaxService->buildTaxableExpenseLines($amount, $accountId, $depositAccount->id);
+
+        DB::transaction(function () use ($company, $row, $rowUpdates, $entry, $entryDate, $data, $lines, $accountId, $previousAccountId, $isDeposit) {
+            $row->update($rowUpdates);
+
+            $this->journalService->updateBalancedEntry(
+                $entry,
+                $company,
+                $entryDate,
+                $data['description'],
+                $lines,
+            );
+
+            if (! $isDeposit && $accountId !== $previousAccountId) {
+                $this->ruleMatcher->learnFromConfirmation($company, $data['description'], $accountId);
+            }
+        });
+    }
+
+    public function resolveCounterAccountId(JournalEntry $entry, BankImportRow $row): int
+    {
+        $entry->loadMissing('lines.account');
+
+        $excludedNames = ['預金', '仮払消費税', '仮受消費税'];
+
+        foreach ($entry->lines as $line) {
+            if (in_array($line->account->name, $excludedNames, true)) {
+                continue;
+            }
+
+            return $line->account_id;
+        }
+
+        if ($row->deposit_amount > 0) {
+            return Account::findByName('売上高')->id;
+        }
+
+        throw new InvalidArgumentException('Could not resolve counter account from journal lines.');
+    }
+
     private function postRow(Company $company, BankImportRow $row, ?int $expenseAccountId): JournalEntry
     {
         $idempotencyKey = "bank_csv:{$row->row_hash}";

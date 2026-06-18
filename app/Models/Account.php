@@ -78,6 +78,14 @@ class Account extends Model
     /**
      * @return Collection<int, self>
      */
+    public static function revenueAccounts(): Collection
+    {
+        return self::revenue()->get();
+    }
+
+    /**
+     * @return Collection<int, self>
+     */
     public static function allOrdered(): Collection
     {
         return self::orderBy('display_order')->get();

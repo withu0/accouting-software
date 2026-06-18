@@ -37,9 +37,14 @@ export default function BankImportIndex({ hasActiveFiscalYear }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="銀行CSV取込" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">銀行CSV取込</h1>
-                    <p className="text-muted-foreground mt-1 text-sm">法人口座の入出金CSVを取り込み、仕訳候補を作成します</p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-semibold tracking-tight">銀行CSV取込</h1>
+                        <p className="text-muted-foreground mt-1 text-sm">法人口座の入出金CSVを取り込み、仕訳候補を作成します</p>
+                    </div>
+                    <Button asChild variant="outline">
+                        <Link href={route('bank-import.history')}>取込履歴</Link>
+                    </Button>
                 </div>
 
                 {flash?.success && (

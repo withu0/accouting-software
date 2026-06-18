@@ -67,6 +67,54 @@ class JournalService
     /**
      * @param  array<int, array{account_id: int, debit: int, credit: int}>  $lines
      */
+    public function updateBalancedEntry(
+        JournalEntry $entry,
+        Company $company,
+        Carbon $entryDate,
+        string $description,
+        array $lines,
+    ): JournalEntry {
+        $this->validateLines($lines);
+
+        $fiscalYear = $company->activeFiscalYear();
+        if ($fiscalYear === null) {
+            throw new InvalidArgumentException('No active fiscal year configured for this company.');
+        }
+
+        if ($entryDate->lt($fiscalYear->start_date) || $entryDate->gt($fiscalYear->end_date)) {
+            throw new InvalidArgumentException('日付は会計期間内である必要があります。');
+        }
+
+        $accountIds = array_column($lines, 'account_id');
+        $existingCount = Account::whereIn('id', $accountIds)->count();
+        if ($existingCount !== count(array_unique($accountIds))) {
+            throw new InvalidArgumentException('One or more account IDs are invalid.');
+        }
+
+        return DB::transaction(function () use ($entry, $fiscalYear, $entryDate, $description, $lines) {
+            $entry->update([
+                'fiscal_year_id' => $fiscalYear->id,
+                'entry_date' => $entryDate,
+                'description' => $description,
+            ]);
+
+            $entry->lines()->delete();
+
+            foreach ($lines as $line) {
+                $entry->lines()->create([
+                    'account_id' => $line['account_id'],
+                    'debit' => $line['debit'],
+                    'credit' => $line['credit'],
+                ]);
+            }
+
+            return $entry->load('lines');
+        });
+    }
+
+    /**
+     * @param  array<int, array{account_id: int, debit: int, credit: int}>  $lines
+     */
     public function validateLines(array $lines): void
     {
         if (count($lines) < 2) {

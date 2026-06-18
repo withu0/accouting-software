@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Enums\BankImportRowStatus;
 use App\Http\Requests\ConfirmBankImportRequest;
 use App\Http\Requests\StoreBankImportRequest;
+use App\Http\Requests\UpdateBankImportRowRequest;
 use App\Models\Account;
 use App\Models\BankImport;
 use App\Models\BankImportRow;
@@ -86,14 +87,21 @@ class BankImportController extends Controller
                     $suggestedAccountId = $suggestedAccount?->id;
                 }
 
+                $isDeposit = $row->deposit_amount > 0;
+                $accountId = $isDeposit
+                    ? Account::findByName('売上高')->id
+                    : $suggestedAccountId;
+
                 return [
                     'id' => $row->id,
                     'transaction_date' => $row->transaction_date->format('Y-m-d'),
                     'description' => $row->description,
                     'deposit_amount' => $row->deposit_amount,
                     'withdrawal_amount' => $row->withdrawal_amount,
-                    'is_deposit' => $row->deposit_amount > 0,
+                    'amount' => $isDeposit ? $row->deposit_amount : $row->withdrawal_amount,
+                    'is_deposit' => $isDeposit,
                     'suggested_account_id' => $suggestedAccountId,
+                    'account_id' => $accountId,
                 ];
             });
 
@@ -109,6 +117,8 @@ class BankImportController extends Controller
             ],
             'rows' => $pendingRows,
             'expenseAccounts' => $expenseAccounts,
+            'accountGroups' => Account::groupedForSelect(),
+            'hasActiveFiscalYear' => $company->activeFiscalYear() !== null,
             'importSummary' => session('importSummary'),
         ]);
     }
@@ -159,6 +169,100 @@ class BankImportController extends Controller
         return redirect()
             ->route('bank-import')
             ->with('success', 'すべての取引の処理が完了しました。');
+    }
+
+    public function history(Request $request): Response
+    {
+        $company = $this->resolveCompany($request);
+
+        $imports = $company->bankImports()
+            ->withCount([
+                'rows as confirmed_count' => fn ($query) => $query->where('status', BankImportRowStatus::Confirmed),
+                'rows as pending_count' => fn ($query) => $query->where('status', BankImportRowStatus::Pending),
+                'rows as skipped_count' => fn ($query) => $query->where('status', BankImportRowStatus::Skipped),
+            ])
+            ->orderByDesc('imported_at')
+            ->orderByDesc('id')
+            ->paginate(25)
+            ->through(fn (BankImport $import) => [
+                'id' => $import->id,
+                'original_filename' => $import->original_filename,
+                'status' => $import->status->value,
+                'row_count' => $import->row_count,
+                'confirmed_count' => $import->confirmed_count,
+                'pending_count' => $import->pending_count,
+                'skipped_count' => $import->skipped_count,
+                'imported_at' => $import->imported_at->format('Y-m-d H:i'),
+            ]);
+
+        return Inertia::render('bank-import/history', [
+            'imports' => $imports,
+            'hasActiveFiscalYear' => $company->activeFiscalYear() !== null,
+        ]);
+    }
+
+    public function show(Request $request, BankImport $bankImport): Response
+    {
+        $company = $this->resolveCompany($request);
+        $this->authorizeImport($company, $bankImport);
+
+        $rows = $bankImport->rows()
+            ->with('journalEntry')
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get()
+            ->map(function (BankImportRow $row) use ($company) {
+                $isDeposit = $row->deposit_amount > 0;
+                $amount = $isDeposit ? $row->deposit_amount : $row->withdrawal_amount;
+                $accountId = null;
+
+                if ($row->status === BankImportRowStatus::Confirmed && $row->journalEntry !== null) {
+                    $accountId = $this->bankImportService->resolveCounterAccountId($row->journalEntry, $row);
+                } elseif (! $isDeposit && $row->suggested_account_id !== null) {
+                    $accountId = $row->suggested_account_id;
+                } elseif ($isDeposit) {
+                    $accountId = Account::findByName('売上高')->id;
+                }
+
+                return [
+                    'id' => $row->id,
+                    'transaction_date' => $row->transaction_date->format('Y-m-d'),
+                    'description' => $row->description,
+                    'amount' => $amount,
+                    'is_deposit' => $isDeposit,
+                    'status' => $row->status->value,
+                    'account_id' => $accountId,
+                    'journal_entry_id' => $row->journal_entry_id,
+                ];
+            });
+
+        return Inertia::render('bank-import/show', [
+            'bankImport' => [
+                'id' => $bankImport->id,
+                'original_filename' => $bankImport->original_filename,
+                'status' => $bankImport->status->value,
+                'imported_at' => $bankImport->imported_at->format('Y-m-d H:i'),
+            ],
+            'rows' => $rows,
+            'accountGroups' => Account::groupedForSelect(),
+            'hasActiveFiscalYear' => $company->activeFiscalYear() !== null,
+        ]);
+    }
+
+    public function updateRow(UpdateBankImportRowRequest $request, BankImportRow $row): RedirectResponse
+    {
+        $company = $this->resolveCompany($request);
+        $this->authorizeImport($company, $row->bankImport);
+
+        $validated = $request->validated();
+
+        try {
+            $this->bankImportService->updateRow($company, $row, $validated);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['row' => $e->getMessage()]);
+        }
+
+        return back()->with('success', '取引を更新しました。');
     }
 
     private function authorizeImport(Company $company, BankImport $bankImport): void

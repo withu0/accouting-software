@@ -21,9 +21,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', fn () => redirect()->route('home'))->name('dashboard');
 
     Route::get('bank-import', [BankImportController::class, 'index'])->name('bank-import');
+    Route::get('bank-import/history', [BankImportController::class, 'history'])->name('bank-import.history');
     Route::post('bank-import', [BankImportController::class, 'store'])->name('bank-import.store');
+    Route::get('bank-import/{bankImport}', [BankImportController::class, 'show'])->name('bank-import.show');
     Route::get('bank-import/{bankImport}/review', [BankImportController::class, 'review'])->name('bank-import.review');
     Route::post('bank-import/{bankImport}/confirm', [BankImportController::class, 'confirm'])->name('bank-import.confirm');
+    Route::patch('bank-import/rows/{row}', [BankImportController::class, 'updateRow'])->name('bank-import.rows.update');
     Route::post('bank-import/rows/{row}/skip', [BankImportController::class, 'skipRow'])->name('bank-import.rows.skip');
 
     Route::get('advance-expenses', [AdvanceExpenseController::class, 'index'])->name('advance-expenses');
@@ -40,6 +43,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('other/transfer-journal/{journalEntry}', [TransferJournalController::class, 'destroy'])->name('transfer-journal.destroy');
 
     Route::get('journals', [JournalController::class, 'index'])->name('journals.index');
+    Route::patch('journals/{journalEntry}', [JournalController::class, 'update'])->name('journals.update');
     Route::delete('journals/bulk', [JournalController::class, 'destroyBulk'])->name('journals.destroy-bulk');
     Route::delete('journals/{journalEntry}', [JournalController::class, 'destroy'])->name('journals.destroy');
 });

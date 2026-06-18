@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import BankImportRowEditDialog from '@/components/bank-import-row-edit-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -7,7 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Pencil } from 'lucide-react';
 import { FormEventHandler, useMemo, useState } from 'react';
 
 interface ExpenseAccount {
@@ -21,8 +22,10 @@ interface ImportRow {
     description: string;
     deposit_amount: number;
     withdrawal_amount: number;
+    amount: number;
     is_deposit: boolean;
     suggested_account_id?: number | null;
+    account_id?: number | null;
 }
 
 interface ImportSummary {
@@ -39,6 +42,8 @@ interface Props {
     };
     rows: ImportRow[];
     expenseAccounts: ExpenseAccount[];
+    accountGroups: Record<string, { id: number; name: string }[]>;
+    hasActiveFiscalYear: boolean;
     importSummary: ImportSummary | null;
 }
 
@@ -62,7 +67,14 @@ function initialAccountSelections(rows: ImportRow[]): Record<number, string> {
     return selections;
 }
 
-export default function BankImportReview({ bankImport, rows, expenseAccounts, importSummary }: Props) {
+export default function BankImportReview({
+    bankImport,
+    rows,
+    expenseAccounts,
+    accountGroups,
+    hasActiveFiscalYear,
+    importSummary,
+}: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(rows.map((r) => r.id)));
     const [accountSelections, setAccountSelections] = useState<Record<number, string>>(() => initialAccountSelections(rows));
@@ -240,9 +252,28 @@ export default function BankImportReview({ bankImport, rows, expenseAccounts, im
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
-                                                        スキップ
-                                                    </Button>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <BankImportRowEditDialog
+                                                            rowId={row.id}
+                                                            isDeposit={row.is_deposit}
+                                                            initialValues={{
+                                                                transaction_date: row.transaction_date,
+                                                                description: row.description,
+                                                                amount: row.amount,
+                                                                account_id: row.account_id ?? null,
+                                                            }}
+                                                            accountGroups={accountGroups}
+                                                            hasActiveFiscalYear={hasActiveFiscalYear}
+                                                            trigger={
+                                                                <Button type="button" variant="ghost" size="sm">
+                                                                    <Pencil className="size-4" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
+                                                            スキップ
+                                                        </Button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

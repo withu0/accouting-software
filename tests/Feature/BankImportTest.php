@@ -492,6 +492,273 @@ CSV;
             ->assertSessionHasErrors('ids');
     }
 
+    public function test_update_pending_row_on_review(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'Amazon.co.jp')->firstOrFail();
+        $expenseAccount = Account::where('name', '通信費')->firstOrFail();
+        $originalHash = $row->row_hash;
+
+        $this->actingAs($this->user)
+            ->patch(route('bank-import.rows.update', $row), [
+                'transaction_date' => '2025-04-10',
+                'description' => 'Amazon.co.jp 修正',
+                'amount' => 6000,
+                'account_id' => $expenseAccount->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', '取引を更新しました。');
+
+        $row->refresh();
+        $this->assertEquals('2025-04-10', $row->transaction_date->format('Y-m-d'));
+        $this->assertEquals('Amazon.co.jp 修正', $row->description);
+        $this->assertEquals(6000, $row->withdrawal_amount);
+        $this->assertEquals(BankImportRowStatus::Pending, $row->status);
+        $this->assertEquals($originalHash, $row->row_hash);
+        $this->assertDatabaseCount('journal_entries', 0);
+    }
+
+    public function test_update_posted_withdrawal_rebuilds_journal(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'Amazon.co.jp')->firstOrFail();
+        $originalHash = $row->row_hash;
+        $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
+        $newExpenseAccount = Account::where('name', '通信費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $row->bank_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ]);
+
+        $entry = JournalEntry::where('description', 'Amazon.co.jp')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('journals.update', $entry), [
+                'transaction_date' => '2025-04-05',
+                'description' => 'Amazon.co.jp 更新',
+                'amount' => 8000,
+                'account_id' => $newExpenseAccount->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', '仕訳を更新しました。');
+
+        $row->refresh();
+        $entry->refresh();
+
+        $this->assertEquals($originalHash, $row->row_hash);
+        $this->assertEquals('Amazon.co.jp 更新', $entry->description);
+        $this->assertEquals('2025-04-05', $entry->entry_date->format('Y-m-d'));
+        $this->assertEquals(8000, $row->withdrawal_amount);
+
+        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
+
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $newExpenseAccount->id,
+            'debit' => 7273,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $inputTaxAccount->id,
+            'debit' => 727,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $depositAccount->id,
+            'debit' => 0,
+            'credit' => 8000,
+        ]);
+    }
+
+    public function test_update_posted_deposit_with_new_revenue_account(): void
+    {
+        $otherRevenue = Account::create([
+            'code' => '4102',
+            'name' => '雑収入',
+            'type' => \App\Enums\AccountType::Revenue,
+            'display_order' => 22,
+        ]);
+
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', '振込 カ）ABC商事')->firstOrFail();
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $row->bank_import_id), [
+                'rows' => [['row_id' => $row->id]],
+            ]);
+
+        $entry = JournalEntry::where('description', '振込 カ）ABC商事')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('bank-import.rows.update', $row), [
+                'transaction_date' => '2025-04-02',
+                'description' => '振込 カ）ABC商事 修正',
+                'amount' => 110000,
+                'account_id' => $otherRevenue->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', '取引を更新しました。');
+
+        $entry->refresh();
+        $this->assertEquals('振込 カ）ABC商事 修正', $entry->description);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $otherRevenue->id,
+            'debit' => 0,
+            'credit' => 100000,
+        ]);
+    }
+
+    public function test_update_row_rejects_date_outside_fiscal_year(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'Amazon.co.jp')->firstOrFail();
+        $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('bank-import.rows.update', $row), [
+                'transaction_date' => '2024-01-01',
+                'description' => $row->description,
+                'amount' => 5000,
+                'account_id' => $expenseAccount->id,
+            ])
+            ->assertSessionHasErrors('transaction_date');
+    }
+
+    public function test_update_deposit_can_use_any_account(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', '振込 カ）ABC商事')->firstOrFail();
+        $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('bank-import.rows.update', $row), [
+                'transaction_date' => '2025-04-01',
+                'description' => $row->description,
+                'amount' => 100000,
+                'account_id' => $expenseAccount->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', '取引を更新しました。');
+
+        $row->refresh();
+        $this->assertEquals(BankImportRowStatus::Pending, $row->status);
+    }
+
+    public function test_cannot_update_non_bank_csv_journal(): void
+    {
+        $entry = JournalEntry::create([
+            'company_id' => $this->company->id,
+            'fiscal_year_id' => $this->company->activeFiscalYear()->id,
+            'entry_date' => '2025-05-01',
+            'description' => '立替経費',
+            'source' => JournalSource::AdvanceExpense,
+        ]);
+
+        $expenseAccount = Account::expenseAccounts()->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('journals.update', $entry), [
+                'transaction_date' => '2025-05-02',
+                'description' => '更新',
+                'amount' => 1000,
+                'account_id' => $expenseAccount->id,
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_history_index_lists_imports(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $this->actingAs($this->user)
+            ->get(route('bank-import.history'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('bank-import/history')
+                ->has('imports.data', 1)
+                ->where('imports.data.0.row_count', 3)
+                ->where('imports.data.0.pending_count', 3)
+            );
+    }
+
+    public function test_show_page_lists_all_row_statuses(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $import = $this->company->bankImports()->firstOrFail();
+        $rows = BankImportRow::where('bank_import_id', $import->id)->orderBy('id')->get();
+
+        $depositRow = $rows->firstWhere('description', '振込 カ）ABC商事');
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $import->id), [
+                'rows' => [['row_id' => $depositRow->id]],
+            ]);
+
+        $this->actingAs($this->user)
+            ->post(route('bank-import.rows.skip', $rows->last()->id));
+
+        $this->actingAs($this->user)
+            ->get(route('bank-import.show', $import))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('bank-import/show')
+                ->has('rows', 3)
+                ->where('rows.0.status', BankImportRowStatus::Confirmed->value)
+                ->where('rows.1.status', BankImportRowStatus::Pending->value)
+                ->where('rows.2.status', BankImportRowStatus::Skipped->value)
+            );
+    }
+
+    public function test_edit_withdrawal_learns_rule(): void
+    {
+        $csv = <<<'CSV'
+日付,摘要,入金額,出金額,残高
+2025-04-10,LearnEditVendor,,3000,1000000
+CSV;
+
+        $file = UploadedFile::fake()->createWithContent('learn-edit.csv', $csv);
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'LearnEditVendor')->firstOrFail();
+        $expenseAccount = Account::where('name', '外注費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $row->bank_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => Account::where('name', '消耗品費')->firstOrFail()->id]],
+            ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('bank-import.rows.update', $row), [
+                'transaction_date' => '2025-04-10',
+                'description' => 'LearnEditVendor',
+                'amount' => 3500,
+                'account_id' => $expenseAccount->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('description_rules', [
+            'company_id' => $this->company->id,
+            'keyword' => 'LearnEditVendor',
+            'account_id' => $expenseAccount->id,
+        ]);
+    }
+
     private function makeSampleCsvFile(string $filename): UploadedFile
     {
         $content = file_get_contents(base_path("samples/bank-csv/{$filename}"));

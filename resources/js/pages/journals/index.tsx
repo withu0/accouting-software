@@ -1,4 +1,5 @@
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import BankImportRowEditDialog from '@/components/bank-import-row-edit-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -14,8 +15,20 @@ import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { CheckCircle2, FileText, Trash2 } from 'lucide-react';
+import { CheckCircle2, FileText, Pencil, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+interface AccountOption {
+    id: number;
+    name: string;
+}
+
+interface BankCsvEditMeta {
+    row_id: number;
+    is_deposit: boolean;
+    amount: number;
+    account_id: number | null;
+}
 
 interface JournalEntry {
     id: number;
@@ -23,6 +36,7 @@ interface JournalEntry {
     description: string;
     source: string;
     total_amount: number;
+    bank_csv_edit?: BankCsvEditMeta;
 }
 
 interface PaginatedEntries {
@@ -36,6 +50,8 @@ interface PaginatedEntries {
 
 interface Props {
     entries: PaginatedEntries;
+    accountGroups: Record<string, AccountOption[]>;
+    hasActiveFiscalYear: boolean;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -58,7 +74,7 @@ function isDeletable(entry: JournalEntry): boolean {
     return entry.source === 'bank_csv';
 }
 
-export default function JournalsIndex({ entries }: Props) {
+export default function JournalsIndex({ entries, accountGroups, hasActiveFiscalYear }: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -190,8 +206,26 @@ export default function JournalsIndex({ entries }: Props) {
                                                 {formatAmount(entry.total_amount)}
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                {entry.source === 'bank_csv' ? (
-                                                    <Dialog>
+                                                {entry.source === 'bank_csv' && entry.bank_csv_edit ? (
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <BankImportRowEditDialog
+                                                            journalId={entry.id}
+                                                            isDeposit={entry.bank_csv_edit.is_deposit}
+                                                            initialValues={{
+                                                                transaction_date: entry.entry_date,
+                                                                description: entry.description,
+                                                                amount: entry.bank_csv_edit.amount,
+                                                                account_id: entry.bank_csv_edit.account_id,
+                                                            }}
+                                                            accountGroups={accountGroups}
+                                                            hasActiveFiscalYear={hasActiveFiscalYear}
+                                                            trigger={
+                                                                <Button variant="ghost" size="sm">
+                                                                    <Pencil className="size-4" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                        <Dialog>
                                                         <DialogTrigger asChild>
                                                             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
                                                                 <Trash2 className="size-4" />
@@ -230,6 +264,9 @@ export default function JournalsIndex({ entries }: Props) {
                                                             </DialogFooter>
                                                         </DialogContent>
                                                     </Dialog>
+                                                    </div>
+                                                ) : entry.source === 'bank_csv' ? (
+                                                    <span className="text-muted-foreground text-xs">—</span>
                                                 ) : (
                                                     <span className="text-muted-foreground text-xs">—</span>
                                                 )}
