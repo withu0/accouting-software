@@ -185,4 +185,108 @@ class AdvanceExpenseTest extends TestCase
             ])
             ->assertSessionHasErrors('entry_date');
     }
+
+    public function test_update_changes_journal_lines(): void
+    {
+        $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
+        $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
+        $newExpenseAccount = Account::where('name', '通信費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('advance-expenses.store'), [
+                'entry_date' => '2025-05-15',
+                'amount' => 5000,
+                'description' => '会議費用',
+                'account_id' => $this->expenseAccount->id,
+            ])
+            ->assertRedirect();
+
+        $entry = JournalEntry::where('description', '会議費用')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('advance-expenses.update', $entry), [
+                'entry_date' => '2025-06-01',
+                'amount' => 11000,
+                'description' => '通信費用',
+                'account_id' => $newExpenseAccount->id,
+            ])
+            ->assertRedirect();
+
+        $entry->refresh();
+        $this->assertSame('2025-06-01', $entry->entry_date->format('Y-m-d'));
+        $this->assertSame('通信費用', $entry->description);
+        $this->assertCount(3, $entry->lines);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $newExpenseAccount->id,
+            'debit' => 10000,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $inputTaxAccount->id,
+            'debit' => 1000,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $officerLoanAccount->id,
+            'debit' => 0,
+            'credit' => 11000,
+        ]);
+    }
+
+    public function test_update_rejects_wrong_source(): void
+    {
+        $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
+        $depositAccount = Account::where('name', '預金')->firstOrFail();
+
+        $entry = JournalEntry::create([
+            'company_id' => $this->company->id,
+            'fiscal_year_id' => $this->activeFiscalYear->id,
+            'entry_date' => '2025-05-01',
+            'description' => '銀行CSV取込',
+            'source' => JournalSource::BankCsv,
+        ]);
+        $entry->lines()->createMany([
+            ['account_id' => $depositAccount->id, 'debit' => 5000, 'credit' => 0],
+            ['account_id' => $officerLoanAccount->id, 'debit' => 0, 'credit' => 5000],
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('advance-expenses.update', $entry), [
+                'entry_date' => '2025-05-15',
+                'amount' => 5000,
+                'description' => 'テスト',
+                'account_id' => $this->expenseAccount->id,
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_update_validates_expense_account(): void
+    {
+        $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
+        $depositAccount = Account::where('name', '預金')->firstOrFail();
+
+        $entry = JournalEntry::create([
+            'company_id' => $this->company->id,
+            'fiscal_year_id' => $this->activeFiscalYear->id,
+            'entry_date' => '2025-05-01',
+            'description' => '更新対象',
+            'source' => JournalSource::AdvanceExpense,
+        ]);
+        $entry->lines()->createMany([
+            ['account_id' => $this->expenseAccount->id, 'debit' => 5000, 'credit' => 0],
+            ['account_id' => $officerLoanAccount->id, 'debit' => 0, 'credit' => 5000],
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('advance-expenses.update', $entry), [
+                'entry_date' => '2025-05-15',
+                'amount' => 5000,
+                'description' => 'テスト',
+                'account_id' => $depositAccount->id,
+            ])
+            ->assertSessionHasErrors('account_id');
+    }
 }

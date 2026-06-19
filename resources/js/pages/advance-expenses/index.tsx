@@ -10,8 +10,8 @@ import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Trash2, Wallet } from 'lucide-react';
-import { FormEventHandler } from 'react';
+import { AlertCircle, CheckCircle2, Pencil, Trash2, Wallet } from 'lucide-react';
+import { FormEventHandler, useEffect, useState } from 'react';
 
 interface ExpenseAccount {
     id: number;
@@ -23,6 +23,7 @@ interface AdvanceExpenseEntry {
     entry_date: string;
     description: string;
     amount: number;
+    account_id: number;
     account_name: string;
 }
 
@@ -39,6 +40,149 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 function formatAmount(amount: number): string {
     return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
+}
+
+function AdvanceExpenseEditDialog({
+    entry,
+    expenseAccounts,
+    hasActiveFiscalYear,
+}: {
+    entry: AdvanceExpenseEntry;
+    expenseAccounts: ExpenseAccount[];
+    hasActiveFiscalYear: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const [entryDate, setEntryDate] = useState(entry.entry_date);
+    const [description, setDescription] = useState(entry.description);
+    const [amount, setAmount] = useState(String(entry.amount));
+    const [accountId, setAccountId] = useState(String(entry.account_id));
+
+    useEffect(() => {
+        if (open) {
+            setEntryDate(entry.entry_date);
+            setDescription(entry.description);
+            setAmount(String(entry.amount));
+            setAccountId(String(entry.account_id));
+            setErrors({});
+        }
+    }, [open, entry]);
+
+    const submit: FormEventHandler = (e) => {
+        e.preventDefault();
+
+        setProcessing(true);
+        setErrors({});
+
+        router.patch(
+            route('advance-expenses.update', entry.id),
+            {
+                entry_date: entryDate,
+                description,
+                amount: parseInt(amount, 10),
+                account_id: parseInt(accountId, 10),
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => setOpen(false),
+                onError: (formErrors) => setErrors(formErrors as Record<string, string>),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="ghost" size="sm">
+                    <Pencil className="size-4" />
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+                <DialogTitle>立替経費を編集</DialogTitle>
+                <DialogDescription>日付・金額・摘要・経費科目を変更します。</DialogDescription>
+
+                {!hasActiveFiscalYear && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="size-4" />
+                        <AlertDescription>会計期間が未設定のため編集できません。</AlertDescription>
+                    </Alert>
+                )}
+
+                <form onSubmit={submit} className="space-y-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor={`edit-date-${entry.id}`}>日付</Label>
+                        <Input
+                            id={`edit-date-${entry.id}`}
+                            type="date"
+                            value={entryDate}
+                            disabled={!hasActiveFiscalYear || processing}
+                            onChange={(e) => setEntryDate(e.target.value)}
+                        />
+                        <InputError message={errors.entry_date} />
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor={`edit-amount-${entry.id}`}>金額</Label>
+                        <Input
+                            id={`edit-amount-${entry.id}`}
+                            type="number"
+                            min={1}
+                            value={amount}
+                            disabled={!hasActiveFiscalYear || processing}
+                            onChange={(e) => setAmount(e.target.value)}
+                        />
+                        <InputError message={errors.amount} />
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor={`edit-description-${entry.id}`}>摘要</Label>
+                        <Input
+                            id={`edit-description-${entry.id}`}
+                            value={description}
+                            disabled={!hasActiveFiscalYear || processing}
+                            onChange={(e) => setDescription(e.target.value)}
+                        />
+                        <InputError message={errors.description} />
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor={`edit-account-${entry.id}`}>経費科目</Label>
+                        <Select
+                            value={accountId}
+                            onValueChange={setAccountId}
+                            disabled={!hasActiveFiscalYear || processing}
+                        >
+                            <SelectTrigger id={`edit-account-${entry.id}`}>
+                                <SelectValue placeholder="経費科目を選択" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {expenseAccounts.map((account) => (
+                                    <SelectItem key={account.id} value={String(account.id)}>
+                                        {account.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <InputError message={errors.account_id} />
+                    </div>
+
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button type="button" variant="outline" disabled={processing}>
+                                キャンセル
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={!hasActiveFiscalYear || processing || !accountId}>
+                            {processing ? '保存中...' : '保存する'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActiveFiscalYear }: Props) {
@@ -190,6 +334,12 @@ export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActi
                                             <td className="px-4 py-3">{entry.account_name}</td>
                                             <td className="px-4 py-3 text-right whitespace-nowrap">{formatAmount(entry.amount)}</td>
                                             <td className="px-4 py-3 text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                <AdvanceExpenseEditDialog
+                                                    entry={entry}
+                                                    expenseAccounts={expenseAccounts}
+                                                    hasActiveFiscalYear={hasActiveFiscalYear}
+                                                />
                                                 <Dialog>
                                                     <DialogTrigger asChild>
                                                         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
@@ -218,6 +368,7 @@ export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActi
                                                         </DialogFooter>
                                                     </DialogContent>
                                                 </Dialog>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

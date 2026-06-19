@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Enums\JournalSource;
 use App\Http\Requests\StoreAdvanceExpenseRequest;
+use App\Http\Requests\UpdateAdvanceExpenseRequest;
 use App\Models\Account;
 use App\Models\Company;
 use App\Models\JournalEntry;
@@ -39,13 +40,20 @@ class AdvanceExpenseController extends Controller
                 ->orderByDesc('entry_date')
                 ->orderByDesc('id')
                 ->get()
-                ->map(fn (JournalEntry $entry) => [
-                    'id' => $entry->id,
-                    'entry_date' => $entry->entry_date->format('Y-m-d'),
-                    'description' => $entry->description,
-                    'amount' => $entry->lines->sum('debit'),
-                    'account_name' => $entry->lines->first(fn ($line) => $line->debit > 0)?->account?->name ?? '',
-                ]);
+                ->map(function (JournalEntry $entry) {
+                    $expenseLine = $entry->lines->first(
+                        fn ($line) => $line->debit > 0 && $line->account?->name !== '仮払消費税',
+                    );
+
+                    return [
+                        'id' => $entry->id,
+                        'entry_date' => $entry->entry_date->format('Y-m-d'),
+                        'description' => $entry->description,
+                        'amount' => $entry->lines->sum('debit'),
+                        'account_id' => $expenseLine?->account_id ?? 0,
+                        'account_name' => $expenseLine?->account?->name ?? '',
+                    ];
+                });
         }
 
         $expenseAccounts = Account::expenseAccounts()->map(fn (Account $account) => [
@@ -82,6 +90,35 @@ class AdvanceExpenseController extends Controller
         );
 
         return back()->with('success', '立替経費を登録しました。');
+    }
+
+    public function update(UpdateAdvanceExpenseRequest $request, JournalEntry $journalEntry): RedirectResponse
+    {
+        $company = $this->resolveCompany($request);
+
+        if ($journalEntry->company_id !== $company->id || $journalEntry->source !== JournalSource::AdvanceExpense) {
+            abort(404);
+        }
+
+        $validated = $request->validated();
+
+        $expenseAccount = Account::findOrFail($validated['account_id']);
+        $officerLoanAccount = Account::findByName('役員借入金');
+        $amount = (int) $validated['amount'];
+
+        $this->journalService->updateBalancedEntry(
+            $journalEntry,
+            $company,
+            Carbon::parse($validated['entry_date']),
+            $validated['description'],
+            $this->consumptionTaxService->buildTaxableExpenseLines(
+                $amount,
+                $expenseAccount->id,
+                $officerLoanAccount->id,
+            ),
+        );
+
+        return back()->with('success', '立替経費を更新しました。');
     }
 
     public function destroy(Request $request, JournalEntry $journalEntry): RedirectResponse

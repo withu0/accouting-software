@@ -31,6 +31,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('advance-expenses', [AdvanceExpenseController::class, 'index'])->name('advance-expenses');
     Route::post('advance-expenses', [AdvanceExpenseController::class, 'store'])->name('advance-expenses.store');
+    Route::patch('advance-expenses/{journalEntry}', [AdvanceExpenseController::class, 'update'])->name('advance-expenses.update');
     Route::delete('advance-expenses/{journalEntry}', [AdvanceExpenseController::class, 'destroy'])->name('advance-expenses.destroy');
 
     Route::get('reports', [ReportController::class, 'index'])->name('reports');
