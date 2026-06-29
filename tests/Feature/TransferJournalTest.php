@@ -12,10 +12,12 @@ use App\Models\User;
 use Database\Seeders\AccountSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\ConsumptionTaxPayload;
 use Tests\TestCase;
 
 class TransferJournalTest extends TestCase
 {
+    use ConsumptionTaxPayload;
     use RefreshDatabase;
 
     private User $user;
@@ -56,14 +58,14 @@ class TransferJournalTest extends TestCase
     public function test_create_posts_balanced_transfer_journal(): void
     {
         $this->actingAs($this->user)
-            ->post(route('transfer-journal.store'), [
+            ->post(route('transfer-journal.store'), array_merge([
                 'entry_date' => '2025-05-15',
                 'debit_account_id' => $this->debitAccount->id,
                 'debit_amount' => 100000,
                 'credit_account_id' => $this->creditAccount->id,
                 'credit_amount' => 100000,
                 'description' => '売掛金計上',
-            ])
+            ], $this->transferTaxPayload()))
             ->assertRedirect();
 
         $this->assertDatabaseHas('journal_entries', [
@@ -91,42 +93,42 @@ class TransferJournalTest extends TestCase
     public function test_unbalanced_amounts_are_rejected(): void
     {
         $this->actingAs($this->user)
-            ->post(route('transfer-journal.store'), [
+            ->post(route('transfer-journal.store'), array_merge([
                 'entry_date' => '2025-05-15',
                 'debit_account_id' => $this->debitAccount->id,
                 'debit_amount' => 100000,
                 'credit_account_id' => $this->creditAccount->id,
                 'credit_amount' => 50000,
                 'description' => 'テスト',
-            ])
+            ], $this->transferTaxPayload()))
             ->assertSessionHasErrors('credit_amount');
     }
 
     public function test_same_debit_and_credit_account_is_rejected(): void
     {
         $this->actingAs($this->user)
-            ->post(route('transfer-journal.store'), [
+            ->post(route('transfer-journal.store'), array_merge([
                 'entry_date' => '2025-05-15',
                 'debit_account_id' => $this->debitAccount->id,
                 'debit_amount' => 100000,
                 'credit_account_id' => $this->debitAccount->id,
                 'credit_amount' => 100000,
                 'description' => 'テスト',
-            ])
+            ], $this->transferTaxPayload()))
             ->assertSessionHasErrors('credit_account_id');
     }
 
     public function test_date_outside_fiscal_year_is_rejected(): void
     {
         $this->actingAs($this->user)
-            ->post(route('transfer-journal.store'), [
+            ->post(route('transfer-journal.store'), array_merge([
                 'entry_date' => '2027-01-01',
                 'debit_account_id' => $this->debitAccount->id,
                 'debit_amount' => 100000,
                 'credit_account_id' => $this->creditAccount->id,
                 'credit_amount' => 100000,
                 'description' => 'テスト',
-            ])
+            ], $this->transferTaxPayload()))
             ->assertSessionHasErrors('entry_date');
     }
 

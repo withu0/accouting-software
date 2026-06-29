@@ -11,10 +11,12 @@ use App\Models\User;
 use Database\Seeders\AccountSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\ConsumptionTaxPayload;
 use Tests\TestCase;
 
 class AdvanceExpenseTest extends TestCase
 {
+    use ConsumptionTaxPayload;
     use RefreshDatabase;
 
     private User $user;
@@ -55,12 +57,12 @@ class AdvanceExpenseTest extends TestCase
         $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->post(route('advance-expenses.store'), [
+            ->post(route('advance-expenses.store'), array_merge([
                 'entry_date' => '2025-05-15',
                 'amount' => 5000,
                 'description' => '会議費用',
                 'account_id' => $this->expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertRedirect();
 
         $this->assertDatabaseHas('journal_entries', [
@@ -96,12 +98,12 @@ class AdvanceExpenseTest extends TestCase
         $depositAccount = Account::where('name', '預金')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->post(route('advance-expenses.store'), [
+            ->post(route('advance-expenses.store'), array_merge([
                 'entry_date' => '2025-05-15',
                 'amount' => 5000,
                 'description' => 'テスト',
                 'account_id' => $depositAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertSessionHasErrors('account_id');
     }
 
@@ -177,12 +179,12 @@ class AdvanceExpenseTest extends TestCase
     public function test_date_outside_fiscal_year_is_rejected(): void
     {
         $this->actingAs($this->user)
-            ->post(route('advance-expenses.store'), [
+            ->post(route('advance-expenses.store'), array_merge([
                 'entry_date' => '2027-01-01',
                 'amount' => 5000,
                 'description' => 'テスト',
                 'account_id' => $this->expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertSessionHasErrors('entry_date');
     }
 
@@ -193,23 +195,23 @@ class AdvanceExpenseTest extends TestCase
         $newExpenseAccount = Account::where('name', '通信費')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->post(route('advance-expenses.store'), [
+            ->post(route('advance-expenses.store'), array_merge([
                 'entry_date' => '2025-05-15',
                 'amount' => 5000,
                 'description' => '会議費用',
                 'account_id' => $this->expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertRedirect();
 
         $entry = JournalEntry::where('description', '会議費用')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('advance-expenses.update', $entry), [
+            ->patch(route('advance-expenses.update', $entry), array_merge([
                 'entry_date' => '2025-06-01',
                 'amount' => 11000,
                 'description' => '通信費用',
                 'account_id' => $newExpenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertRedirect();
 
         $entry->refresh();
@@ -254,12 +256,12 @@ class AdvanceExpenseTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->patch(route('advance-expenses.update', $entry), [
+            ->patch(route('advance-expenses.update', $entry), array_merge([
                 'entry_date' => '2025-05-15',
                 'amount' => 5000,
                 'description' => 'テスト',
                 'account_id' => $this->expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertNotFound();
     }
 
@@ -281,12 +283,12 @@ class AdvanceExpenseTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->patch(route('advance-expenses.update', $entry), [
+            ->patch(route('advance-expenses.update', $entry), array_merge([
                 'entry_date' => '2025-05-15',
                 'amount' => 5000,
                 'description' => 'テスト',
                 'account_id' => $depositAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertSessionHasErrors('account_id');
     }
 }

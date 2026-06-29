@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\ConsumptionTaxMethod;
+use App\Enums\SimplifiedTaxIndustry;
 use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\FiscalYearRequest;
@@ -21,9 +23,18 @@ class FiscalYearSettingsController extends Controller
         $company = $this->resolveCompany($request);
 
         return Inertia::render('settings/fiscal-year', [
-            'company' => $company->only('id', 'name', 'representative_name', 'address'),
+            'company' => [
+                'id' => $company->id,
+                'name' => $company->name,
+                'representative_name' => $company->representative_name,
+                'address' => $company->address,
+                'consumption_tax_method' => ($company->consumption_tax_method ?? ConsumptionTaxMethod::Standard)->value,
+                'simplified_tax_industry' => $company->simplified_tax_industry?->value,
+            ],
             'fiscalYears' => $company->fiscalYears()->orderByDesc('start_date')->get(),
             'activeFiscalYear' => $company->activeFiscalYear(),
+            'consumptionTaxMethods' => ConsumptionTaxMethod::options(),
+            'simplifiedTaxIndustries' => SimplifiedTaxIndustry::options(),
         ]);
     }
 

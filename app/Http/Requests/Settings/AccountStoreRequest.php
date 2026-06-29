@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Settings;
 
 use App\Enums\AccountType;
+use App\Enums\ConsumptionTaxCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,6 +20,7 @@ class AccountStoreRequest extends FormRequest
             'name' => ['required', 'string', 'max:255', 'unique:accounts,name'],
             'type' => ['required', Rule::enum(AccountType::class)],
             'display_order' => ['nullable', 'integer', 'min:1'],
+            'default_consumption_tax_category' => ['nullable', Rule::enum(ConsumptionTaxCategory::class)],
         ];
     }
 

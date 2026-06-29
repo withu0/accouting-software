@@ -3,23 +3,26 @@
 namespace App\Http\Requests;
 
 use App\Models\JournalEntry;
+use App\Http\Requests\Concerns\ValidatesConsumptionTax;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class UpdateBankImportJournalRequest extends FormRequest
 {
+    use ValidatesConsumptionTax;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        return [
+        return array_merge([
             'transaction_date' => ['required', 'date'],
             'description' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'integer', 'min:1'],
             'account_id' => ['required', 'integer', 'exists:accounts,id'],
-        ];
+        ], $this->consumptionTaxRules());
     }
 
     public function withValidator(Validator $validator): void

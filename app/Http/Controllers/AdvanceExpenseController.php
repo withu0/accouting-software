@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesCompany;
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Http\Requests\StoreAdvanceExpenseRequest;
 use App\Http\Requests\UpdateAdvanceExpenseRequest;
@@ -52,6 +53,8 @@ class AdvanceExpenseController extends Controller
                         'amount' => $entry->lines->sum('debit'),
                         'account_id' => $expenseLine?->account_id ?? 0,
                         'account_name' => $expenseLine?->account?->name ?? '',
+                        'consumption_tax_category' => $entry->consumption_tax_category?->value,
+                        'has_qualified_invoice' => $entry->has_qualified_invoice,
                     ];
                 });
         }
@@ -59,11 +62,13 @@ class AdvanceExpenseController extends Controller
         $expenseAccounts = Account::expenseAccounts()->map(fn (Account $account) => [
             'id' => $account->id,
             'name' => $account->name,
+            'default_consumption_tax_category' => $account->default_consumption_tax_category?->value,
         ]);
 
         return Inertia::render('advance-expenses/index', [
             'entries' => $entries,
             'expenseAccounts' => $expenseAccounts,
+            'purchaseTaxCategories' => ConsumptionTaxCategory::optionsForPurchases(),
             'hasActiveFiscalYear' => $activeFiscalYear !== null,
         ]);
     }
@@ -76,17 +81,32 @@ class AdvanceExpenseController extends Controller
         $expenseAccount = Account::findOrFail($validated['account_id']);
         $officerLoanAccount = Account::findByName('役員借入金');
         $amount = (int) $validated['amount'];
+        $entryDate = Carbon::parse($validated['entry_date']);
+        $baseCategory = ConsumptionTaxCategory::from($validated['consumption_tax_category']);
+        $hasQualifiedInvoice = $baseCategory->isBasePurchase()
+            ? (bool) ($validated['has_qualified_invoice'] ?? true)
+            : null;
+        $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
+            $baseCategory,
+            $hasQualifiedInvoice,
+            $entryDate,
+        );
 
         $this->journalService->createBalancedEntry(
             $company,
-            Carbon::parse($validated['entry_date']),
+            $entryDate,
             $validated['description'],
             JournalSource::AdvanceExpense,
-            $this->consumptionTaxService->buildTaxableExpenseLines(
+            $this->consumptionTaxService->buildJournalLines(
+                $effectiveCategory,
                 $amount,
                 $expenseAccount->id,
                 $officerLoanAccount->id,
+                false,
             ),
+            null,
+            $baseCategory,
+            $hasQualifiedInvoice,
         );
 
         return back()->with('success', '立替経費を登録しました。');
@@ -105,17 +125,31 @@ class AdvanceExpenseController extends Controller
         $expenseAccount = Account::findOrFail($validated['account_id']);
         $officerLoanAccount = Account::findByName('役員借入金');
         $amount = (int) $validated['amount'];
+        $entryDate = Carbon::parse($validated['entry_date']);
+        $baseCategory = ConsumptionTaxCategory::from($validated['consumption_tax_category']);
+        $hasQualifiedInvoice = $baseCategory->isBasePurchase()
+            ? (bool) ($validated['has_qualified_invoice'] ?? true)
+            : null;
+        $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
+            $baseCategory,
+            $hasQualifiedInvoice,
+            $entryDate,
+        );
 
         $this->journalService->updateBalancedEntry(
             $journalEntry,
             $company,
-            Carbon::parse($validated['entry_date']),
+            $entryDate,
             $validated['description'],
-            $this->consumptionTaxService->buildTaxableExpenseLines(
+            $this->consumptionTaxService->buildJournalLines(
+                $effectiveCategory,
                 $amount,
                 $expenseAccount->id,
                 $officerLoanAccount->id,
+                false,
             ),
+            $baseCategory,
+            $hasQualifiedInvoice,
         );
 
         return back()->with('success', '立替経費を更新しました。');

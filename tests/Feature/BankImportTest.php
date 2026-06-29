@@ -15,10 +15,12 @@ use Database\Seeders\DescriptionRuleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\ConsumptionTaxPayload;
 use Tests\TestCase;
 
 class BankImportTest extends TestCase
 {
+    use ConsumptionTaxPayload;
     use RefreshDatabase;
 
     private User $user;
@@ -502,12 +504,12 @@ CSV;
         $originalHash = $row->row_hash;
 
         $this->actingAs($this->user)
-            ->patch(route('bank-import.rows.update', $row), [
+            ->patch(route('bank-import.rows.update', $row), array_merge([
                 'transaction_date' => '2025-04-10',
                 'description' => 'Amazon.co.jp 修正',
                 'amount' => 6000,
                 'account_id' => $expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertRedirect()
             ->assertSessionHas('success', '取引を更新しました。');
 
@@ -538,12 +540,12 @@ CSV;
         $entry = JournalEntry::where('description', 'Amazon.co.jp')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('journals.update', $entry), [
+            ->patch(route('journals.update', $entry), array_merge([
                 'transaction_date' => '2025-04-05',
                 'description' => 'Amazon.co.jp 更新',
                 'amount' => 8000,
                 'account_id' => $newExpenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertRedirect()
             ->assertSessionHas('success', '仕訳を更新しました。');
 
@@ -599,12 +601,12 @@ CSV;
         $entry = JournalEntry::where('description', '振込 カ）ABC商事')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('bank-import.rows.update', $row), [
+            ->patch(route('bank-import.rows.update', $row), array_merge([
                 'transaction_date' => '2025-04-02',
                 'description' => '振込 カ）ABC商事 修正',
                 'amount' => 110000,
                 'account_id' => $otherRevenue->id,
-            ])
+            ], $this->salesTaxPayload()))
             ->assertRedirect()
             ->assertSessionHas('success', '取引を更新しました。');
 
@@ -627,12 +629,12 @@ CSV;
         $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('bank-import.rows.update', $row), [
+            ->patch(route('bank-import.rows.update', $row), array_merge([
                 'transaction_date' => '2024-01-01',
                 'description' => $row->description,
                 'amount' => 5000,
                 'account_id' => $expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertSessionHasErrors('transaction_date');
     }
 
@@ -645,12 +647,12 @@ CSV;
         $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('bank-import.rows.update', $row), [
+            ->patch(route('bank-import.rows.update', $row), array_merge([
                 'transaction_date' => '2025-04-01',
                 'description' => $row->description,
                 'amount' => 100000,
                 'account_id' => $expenseAccount->id,
-            ])
+            ], $this->salesTaxPayload()))
             ->assertRedirect()
             ->assertSessionHas('success', '取引を更新しました。');
 
@@ -671,12 +673,12 @@ CSV;
         $expenseAccount = Account::expenseAccounts()->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('journals.update', $entry), [
+            ->patch(route('journals.update', $entry), array_merge([
                 'transaction_date' => '2025-05-02',
                 'description' => '更新',
                 'amount' => 1000,
                 'account_id' => $expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertNotFound();
     }
 
@@ -744,12 +746,12 @@ CSV;
             ]);
 
         $this->actingAs($this->user)
-            ->patch(route('bank-import.rows.update', $row), [
+            ->patch(route('bank-import.rows.update', $row), array_merge([
                 'transaction_date' => '2025-04-10',
                 'description' => 'LearnEditVendor',
                 'amount' => 3500,
                 'account_id' => $expenseAccount->id,
-            ])
+            ], $this->purchaseTaxPayload()))
             ->assertRedirect();
 
         $this->assertDatabaseHas('description_rules', [
@@ -779,7 +781,7 @@ CSV;
     public static function bankSampleFileProvider(): array
     {
         return [
-            'native april' => ['native-2025-04.csv', 5, 'native'],
+            'native april' => ['native-2025-04.csv', 10, 'native'],
             'gmo native april' => ['gmo-native-2025-04.csv', 5, 'gmo_native'],
             'rakuten april' => ['rakuten-2025-04.csv', 5, 'rakuten'],
             'sbi april' => ['sbi-2025-04.csv', 5, 'sbi_sumishin'],

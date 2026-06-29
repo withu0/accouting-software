@@ -2,25 +2,28 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesConsumptionTax;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class StoreTransferJournalRequest extends FormRequest
 {
+    use ValidatesConsumptionTax;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        return [
+        return array_merge([
             'entry_date' => ['required', 'date'],
             'debit_account_id' => ['required', 'integer', 'exists:accounts,id'],
             'debit_amount' => ['required', 'integer', 'min:1'],
             'credit_account_id' => ['required', 'integer', 'exists:accounts,id', 'different:debit_account_id'],
             'credit_amount' => ['required', 'integer', 'min:1'],
             'description' => ['required', 'string', 'max:255'],
-        ];
+        ], $this->consumptionTaxRules());
     }
 
     public function withValidator(Validator $validator): void

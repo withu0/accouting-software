@@ -1,3 +1,4 @@
+import ConsumptionTaxFields, { type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ interface Props {
     entries: TransferEntry[];
     accountGroups: Record<string, { id: number; name: string }[]>;
     presets: TransferPreset[];
+    transferTaxCategories: TaxCategoryOption[];
     hasActiveFiscalYear: boolean;
 }
 
@@ -47,7 +49,13 @@ function formatAmount(amount: number): string {
     return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
 }
 
-export default function TransferJournal({ entries, accountGroups, presets, hasActiveFiscalYear }: Props) {
+export default function TransferJournal({
+    entries,
+    accountGroups,
+    presets,
+    transferTaxCategories,
+    hasActiveFiscalYear,
+}: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
 
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -57,6 +65,7 @@ export default function TransferJournal({ entries, accountGroups, presets, hasAc
         credit_account_id: '',
         credit_amount: '',
         description: '',
+        consumption_tax_category: 'out_of_scope',
     });
 
     const amountsMismatch = useMemo(() => {
@@ -259,6 +268,17 @@ export default function TransferJournal({ entries, accountGroups, presets, hasAc
                                 />
                                 <InputError message={errors.description} />
                             </div>
+
+                            <ConsumptionTaxFields
+                                idPrefix="transfer-tax"
+                                category={data.consumption_tax_category}
+                                hasQualifiedInvoice={true}
+                                categoryOptions={transferTaxCategories}
+                                onCategoryChange={(value) => setData('consumption_tax_category', value)}
+                                onQualifiedInvoiceChange={() => undefined}
+                                showQualifiedInvoice={false}
+                                categoryError={errors.consumption_tax_category}
+                            />
 
                             <Button type="submit" disabled={!hasActiveFiscalYear || processing || amountsMismatch}>
                                 {processing ? '登録中...' : '登録する'}

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AccountType;
+use App\Enums\ConsumptionTaxCategory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,7 @@ class Account extends Model
         'name',
         'type',
         'display_order',
+        'default_consumption_tax_category',
     ];
 
     protected function casts(): array
@@ -23,6 +25,7 @@ class Account extends Model
         return [
             'type' => AccountType::class,
             'display_order' => 'integer',
+            'default_consumption_tax_category' => ConsumptionTaxCategory::class,
         ];
     }
 
@@ -111,6 +114,7 @@ class Account extends Model
             $grouped[$label][] = [
                 'id' => $account->id,
                 'name' => $account->name,
+                'default_consumption_tax_category' => $account->default_consumption_tax_category?->value,
             ];
         }
 
@@ -140,6 +144,7 @@ class Account extends Model
                 'name' => $account->name,
                 'type' => $account->type->value,
                 'display_order' => $account->display_order,
+                'default_consumption_tax_category' => $account->default_consumption_tax_category?->value,
                 'is_in_use' => $account->isInUse(),
             ];
         }

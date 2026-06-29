@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\BankImportRowStatus;
 use App\Enums\BankImportStatus;
 use App\Enums\BankCsvFormat;
@@ -184,7 +185,7 @@ class BankImportService
     }
 
     /**
-     * @param  array<int, array{row_id: int, account_id?: int}>  $confirmations
+     * @param  array<int, array{row_id: int, account_id?: int, consumption_tax_category?: string, has_qualified_invoice?: bool}>  $confirmations
      * @return array{confirmed: int, skipped: int}
      */
     public function confirmRows(Company $company, BankImport $bankImport, array $confirmations): array
@@ -204,7 +205,7 @@ class BankImportService
                 }
 
                 $accountId = $confirmation['account_id'] ?? null;
-                $entry = $this->postRow($company, $row, $accountId);
+                $entry = $this->postRow($company, $row, $accountId, $confirmation);
 
                 if ($accountId !== null && $row->withdrawal_amount > 0) {
                     $this->ruleMatcher->learnFromConfirmation($company, $row->description, $accountId);
@@ -279,7 +280,7 @@ class BankImportService
     }
 
     /**
-     * @param  array{transaction_date: string, description: string, amount: int, account_id: int}  $data
+     * @param  array{transaction_date: string, description: string, amount: int, account_id: int, consumption_tax_category?: string, has_qualified_invoice?: bool}  $data
      */
     public function updateRow(Company $company, BankImportRow $row, array $data): void
     {
@@ -336,14 +337,16 @@ class BankImportService
         }
 
         $previousAccountId = $this->resolveCounterAccountId($entry, $row);
-        $depositAccount = Account::findByName('預金');
 
         $lines = $isDeposit
-            ? $this->consumptionTaxService->buildTaxableRevenueLines($amount, $depositAccount->id, $accountId)
-            : $this->consumptionTaxService->buildTaxableExpenseLines($amount, $accountId, $depositAccount->id);
+            ? $this->buildRevenueJournalLines($company, $entryDate, $amount, $accountId, $data)
+            : $this->buildExpenseJournalLines($company, $entryDate, $amount, $accountId, $data);
 
         DB::transaction(function () use ($company, $row, $rowUpdates, $entry, $entryDate, $data, $lines, $accountId, $previousAccountId, $isDeposit) {
             $row->update($rowUpdates);
+
+            $taxCategory = $this->resolveBaseCategory($data, $isDeposit, $accountId);
+            $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($taxCategory, $data);
 
             $this->journalService->updateBalancedEntry(
                 $entry,
@@ -351,6 +354,8 @@ class BankImportService
                 $entryDate,
                 $data['description'],
                 $lines,
+                $taxCategory,
+                $hasQualifiedInvoice,
             );
 
             if (! $isDeposit && $accountId !== $previousAccountId) {
@@ -380,7 +385,10 @@ class BankImportService
         throw new InvalidArgumentException('Could not resolve counter account from journal lines.');
     }
 
-    private function postRow(Company $company, BankImportRow $row, ?int $expenseAccountId): JournalEntry
+    /**
+     * @param  array{consumption_tax_category?: string, has_qualified_invoice?: bool}  $options
+     */
+    private function postRow(Company $company, BankImportRow $row, ?int $expenseAccountId, array $options = []): JournalEntry
     {
         $idempotencyKey = "bank_csv:{$row->row_hash}";
 
@@ -393,21 +401,29 @@ class BankImportService
         }
 
         $depositAccount = Account::findByName('預金');
+        $entryDate = Carbon::parse($row->transaction_date);
 
         if ($row->deposit_amount > 0) {
             $revenueAccount = Account::findByName('売上高');
+            $baseCategory = $this->resolveBaseCategory($options, true, $revenueAccount->id);
+            $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory($baseCategory, null, $entryDate);
+            $lines = $this->consumptionTaxService->buildJournalLines(
+                $effectiveCategory,
+                $row->deposit_amount,
+                $revenueAccount->id,
+                $depositAccount->id,
+                true,
+            );
 
             return $this->journalService->createBalancedEntry(
                 $company,
-                Carbon::parse($row->transaction_date),
+                $entryDate,
                 $row->description,
                 JournalSource::BankCsv,
-                $this->consumptionTaxService->buildTaxableRevenueLines(
-                    $row->deposit_amount,
-                    $depositAccount->id,
-                    $revenueAccount->id,
-                ),
+                $lines,
                 $idempotencyKey,
+                $baseCategory,
+                null,
             );
         }
 
@@ -420,18 +436,108 @@ class BankImportService
             throw new InvalidArgumentException('Invalid expense account selected.');
         }
 
+        $baseCategory = $this->resolveBaseCategory($options, false, $expenseAccountId);
+        $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
+        $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
+            $baseCategory,
+            $hasQualifiedInvoice,
+            $entryDate,
+        );
+        $lines = $this->consumptionTaxService->buildJournalLines(
+            $effectiveCategory,
+            $row->withdrawal_amount,
+            $expenseAccountId,
+            $depositAccount->id,
+            false,
+        );
+
         return $this->journalService->createBalancedEntry(
             $company,
-            Carbon::parse($row->transaction_date),
+            $entryDate,
             $row->description,
             JournalSource::BankCsv,
-            $this->consumptionTaxService->buildTaxableExpenseLines(
-                $row->withdrawal_amount,
-                $expenseAccountId,
-                $depositAccount->id,
-            ),
+            $lines,
             $idempotencyKey,
+            $baseCategory,
+            $hasQualifiedInvoice,
         );
+    }
+
+    /**
+     * @param  array{consumption_tax_category?: string, has_qualified_invoice?: bool}  $options
+     * @return array<int, array{account_id: int, debit: int, credit: int}>
+     */
+    private function buildRevenueJournalLines(Company $company, Carbon $entryDate, int $amount, int $revenueAccountId, array $options): array
+    {
+        $depositAccount = Account::findByName('預金');
+        $baseCategory = $this->resolveBaseCategory($options, true, $revenueAccountId);
+        $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory($baseCategory, null, $entryDate);
+
+        return $this->consumptionTaxService->buildJournalLines(
+            $effectiveCategory,
+            $amount,
+            $revenueAccountId,
+            $depositAccount->id,
+            true,
+        );
+    }
+
+    /**
+     * @param  array{consumption_tax_category?: string, has_qualified_invoice?: bool}  $options
+     * @return array<int, array{account_id: int, debit: int, credit: int}>
+     */
+    private function buildExpenseJournalLines(Company $company, Carbon $entryDate, int $amount, int $expenseAccountId, array $options): array
+    {
+        $depositAccount = Account::findByName('預金');
+        $baseCategory = $this->resolveBaseCategory($options, false, $expenseAccountId);
+        $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
+        $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
+            $baseCategory,
+            $hasQualifiedInvoice,
+            $entryDate,
+        );
+
+        return $this->consumptionTaxService->buildJournalLines(
+            $effectiveCategory,
+            $amount,
+            $expenseAccountId,
+            $depositAccount->id,
+            false,
+        );
+    }
+
+    /**
+     * @param  array{consumption_tax_category?: string}  $options
+     */
+    private function resolveBaseCategory(array $options, bool $isDeposit, int $accountId): ConsumptionTaxCategory
+    {
+        if (! empty($options['consumption_tax_category'])) {
+            return ConsumptionTaxCategory::from($options['consumption_tax_category']);
+        }
+
+        $account = Account::findOrFail($accountId);
+
+        if ($account->default_consumption_tax_category !== null) {
+            return $account->default_consumption_tax_category;
+        }
+
+        return $isDeposit
+            ? ConsumptionTaxCategory::TaxableSales10
+            : ConsumptionTaxCategory::TaxablePurchase10;
+    }
+
+    /**
+     * @param  array{has_qualified_invoice?: bool}  $options
+     */
+    private function resolveHasQualifiedInvoice(ConsumptionTaxCategory $baseCategory, array $options): ?bool
+    {
+        if (! $baseCategory->isBasePurchase()) {
+            return null;
+        }
+
+        return array_key_exists('has_qualified_invoice', $options)
+            ? (bool) $options['has_qualified_invoice']
+            : true;
     }
 
     private function updateImportStatus(BankImport $bankImport): void

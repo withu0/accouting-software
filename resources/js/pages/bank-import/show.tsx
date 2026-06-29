@@ -22,6 +22,8 @@ interface ImportRow {
     status: string;
     account_id: number | null;
     journal_entry_id: number | null;
+    consumption_tax_category?: string | null;
+    has_qualified_invoice?: boolean;
 }
 
 interface Props {
@@ -33,6 +35,8 @@ interface Props {
     };
     rows: ImportRow[];
     accountGroups: Record<string, AccountOption[]>;
+    salesTaxCategories: Array<{ value: string; label: string }>;
+    purchaseTaxCategories: Array<{ value: string; label: string }>;
     hasActiveFiscalYear: boolean;
 }
 
@@ -67,6 +71,8 @@ export default function BankImportShow({
     bankImport,
     rows,
     accountGroups,
+    salesTaxCategories,
+    purchaseTaxCategories,
     hasActiveFiscalYear,
 }: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
@@ -134,8 +140,14 @@ export default function BankImportShow({
                                                             description: row.description,
                                                             amount: row.amount,
                                                             account_id: row.account_id,
+                                                            consumption_tax_category:
+                                                                row.consumption_tax_category ??
+                                                                (row.is_deposit ? 'taxable_sales_10' : 'taxable_purchase_10'),
+                                                            has_qualified_invoice: row.has_qualified_invoice ?? true,
                                                         }}
                                                         accountGroups={accountGroups}
+                                                        salesTaxCategories={salesTaxCategories}
+                                                        purchaseTaxCategories={purchaseTaxCategories}
                                                         hasActiveFiscalYear={hasActiveFiscalYear}
                                                         trigger={
                                                             <Button variant="ghost" size="sm">

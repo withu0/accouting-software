@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Enums\AccountType;
+use App\Enums\ConsumptionTaxCategory;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\AccountStoreRequest;
 use App\Http\Requests\Settings\AccountUpdateRequest;
@@ -22,6 +23,9 @@ class AccountSettingsController extends Controller
                 'value' => $type->value,
                 'label' => $this->typeLabel($type),
             ])->values(),
+            'taxCategoryOptions' => collect(AccountType::cases())->mapWithKeys(fn (AccountType $type) => [
+                $type->value => ConsumptionTaxCategory::optionsForAccountType($type),
+            ]),
         ]);
     }
 
@@ -35,6 +39,7 @@ class AccountSettingsController extends Controller
             'name' => $data['name'],
             'type' => $data['type'],
             'display_order' => $displayOrder,
+            'default_consumption_tax_category' => $data['default_consumption_tax_category'] ?? null,
         ]);
 
         return redirect()->route('accounts.edit')->with('success', '勘定科目を追加しました。');

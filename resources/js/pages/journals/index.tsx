@@ -28,6 +28,8 @@ interface BankCsvEditMeta {
     is_deposit: boolean;
     amount: number;
     account_id: number | null;
+    consumption_tax_category: string;
+    has_qualified_invoice: boolean;
 }
 
 interface JournalEntry {
@@ -53,6 +55,9 @@ interface PaginatedEntries {
 interface Props {
     entries: PaginatedEntries;
     accountGroups: Record<string, AccountOption[]>;
+    expenseAccounts: Array<{ id: number; default_consumption_tax_category?: string | null }>;
+    salesTaxCategories: Array<{ value: string; label: string }>;
+    purchaseTaxCategories: Array<{ value: string; label: string }>;
     hasActiveFiscalYear: boolean;
 }
 
@@ -76,7 +81,14 @@ function isDeletable(entry: JournalEntry): boolean {
     return entry.source === 'bank_csv';
 }
 
-export default function JournalsIndex({ entries, accountGroups, hasActiveFiscalYear }: Props) {
+export default function JournalsIndex({
+    entries,
+    accountGroups,
+    expenseAccounts,
+    salesTaxCategories,
+    purchaseTaxCategories,
+    hasActiveFiscalYear,
+}: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -223,8 +235,13 @@ export default function JournalsIndex({ entries, accountGroups, hasActiveFiscalY
                                                                 description: entry.description,
                                                                 amount: entry.bank_csv_edit.amount,
                                                                 account_id: entry.bank_csv_edit.account_id,
+                                                                consumption_tax_category: entry.bank_csv_edit.consumption_tax_category,
+                                                                has_qualified_invoice: entry.bank_csv_edit.has_qualified_invoice,
                                                             }}
                                                             accountGroups={accountGroups}
+                                                            expenseAccounts={expenseAccounts}
+                                                            salesTaxCategories={salesTaxCategories}
+                                                            purchaseTaxCategories={purchaseTaxCategories}
                                                             hasActiveFiscalYear={hasActiveFiscalYear}
                                                             trigger={
                                                                 <Button variant="ghost" size="sm">

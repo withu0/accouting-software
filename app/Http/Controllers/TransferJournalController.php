@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesCompany;
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Http\Requests\StoreTransferJournalRequest;
 use App\Models\Account;
@@ -44,6 +45,7 @@ class TransferJournalController extends Controller
                     'amount' => $entry->lines->sum('debit'),
                     'debit_account_name' => $entry->lines->first(fn ($line) => $line->debit > 0)?->account?->name ?? '',
                     'credit_account_name' => $entry->lines->first(fn ($line) => $line->credit > 0)?->account?->name ?? '',
+                    'consumption_tax_category' => $entry->consumption_tax_category?->value,
                 ]);
         }
 
@@ -51,6 +53,7 @@ class TransferJournalController extends Controller
             'entries' => $entries,
             'accountGroups' => Account::groupedForSelect(),
             'presets' => $this->resolvePresets(),
+            'transferTaxCategories' => ConsumptionTaxCategory::optionsForTransfer(),
             'hasActiveFiscalYear' => $activeFiscalYear !== null,
         ]);
     }
@@ -60,6 +63,7 @@ class TransferJournalController extends Controller
         $company = $this->resolveCompany($request);
         $validated = $request->validated();
         $amount = (int) $validated['debit_amount'];
+        $baseCategory = ConsumptionTaxCategory::from($validated['consumption_tax_category']);
 
         $this->journalService->createBalancedEntry(
             $company,
@@ -70,6 +74,9 @@ class TransferJournalController extends Controller
                 ['account_id' => (int) $validated['debit_account_id'], 'debit' => $amount, 'credit' => 0],
                 ['account_id' => (int) $validated['credit_account_id'], 'debit' => 0, 'credit' => $amount],
             ],
+            null,
+            $baseCategory,
+            null,
         );
 
         return back()->with('success', '振替伝票を登録しました。');

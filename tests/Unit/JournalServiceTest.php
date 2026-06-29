@@ -91,7 +91,7 @@ class JournalServiceTest extends TestCase
     public function test_entry_outside_fiscal_year_throws_exception(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('outside the active fiscal year');
+        $this->expectExceptionMessage('日付は会計期間内である必要があります。');
 
         $this->journalService->createBalancedEntry(
             $this->company,

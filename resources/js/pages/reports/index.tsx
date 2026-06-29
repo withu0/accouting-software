@@ -73,11 +73,33 @@ interface GeneralLedgerReport {
     accounts: LedgerAccount[];
 }
 
+interface ConsumptionTaxReport {
+    company_name: string;
+    fiscal_period: string;
+    tax_method: string;
+    simplified_industry: string | null;
+    rows: Array<{
+        category: string;
+        category_label: string;
+        transaction_count: number;
+        gross_total: number;
+        net_total: number;
+        tax_total: number;
+        deductible_tax_total: number;
+    }>;
+    summary: {
+        output_tax_total: number;
+        input_tax_total: number;
+        estimated_tax_payable: number;
+    };
+}
+
 interface Reports {
     pl: ProfitAndLossReport | null;
     bs: BalanceSheetReport | null;
     journal: JournalBookReport | null;
     ledger: GeneralLedgerReport | null;
+    consumption_tax: ConsumptionTaxReport | null;
 }
 
 interface Props {
@@ -97,6 +119,7 @@ const tabs = [
     { id: 'bs', label: '貸借対照表' },
     { id: 'journal', label: '仕訳帳' },
     { id: 'ledger', label: '総勘定元帳' },
+    { id: 'consumption_tax', label: '消費税区分集計' },
 ] as const;
 
 function formatAmount(amount: number): string {
@@ -106,12 +129,14 @@ function formatAmount(amount: number): string {
 function ExportButtons({ type }: { type: string }) {
     return (
         <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" asChild>
-                <a href={route('reports.export', { type, format: 'pdf' })}>
-                    <FileText className="size-4" />
-                    PDF
-                </a>
-            </Button>
+            {type !== 'consumption_tax' && (
+                <Button variant="outline" size="sm" asChild>
+                    <a href={route('reports.export', { type, format: 'pdf' })}>
+                        <FileText className="size-4" />
+                        PDF
+                    </a>
+                </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
                 <a href={route('reports.export', { type, format: 'csv' })}>
                     <FileSpreadsheet className="size-4" />
@@ -345,6 +370,98 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            ) : (
+                                <EmptyReport />
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {activeTab === 'consumption_tax' && (
+                    <Card>
+                        <CardHeader className="flex flex-row items-start justify-between gap-4">
+                            <div>
+                                <CardTitle>消費税区分集計</CardTitle>
+                                <CardDescription>税区分別の取引集計と納付税額見込</CardDescription>
+                            </div>
+                            {hasActiveFiscalYear && <ExportButtons type="consumption_tax" />}
+                        </CardHeader>
+                        <CardContent>
+                            {reports.consumption_tax ? (
+                                <div className="space-y-6">
+                                    <div className="text-muted-foreground grid gap-1 text-sm sm:grid-cols-2">
+                                        <p>課税方式: {reports.consumption_tax.tax_method}</p>
+                                        {reports.consumption_tax.simplified_industry && (
+                                            <p>簡易課税業種: {reports.consumption_tax.simplified_industry}</p>
+                                        )}
+                                    </div>
+                                    <div className="overflow-x-auto rounded-lg border">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="bg-muted/50 border-b">
+                                                    <th className="px-4 py-3 text-left font-medium">税区分</th>
+                                                    <th className="px-4 py-3 text-right font-medium">件数</th>
+                                                    <th className="px-4 py-3 text-right font-medium">税込合計</th>
+                                                    <th className="px-4 py-3 text-right font-medium">税抜合計</th>
+                                                    <th className="px-4 py-3 text-right font-medium">消費税額</th>
+                                                    <th className="px-4 py-3 text-right font-medium">控除対象税額</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {reports.consumption_tax.rows.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={6} className="text-muted-foreground px-4 py-8 text-center">
+                                                            該当データがありません
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    reports.consumption_tax.rows.map((row) => (
+                                                        <tr key={row.category} className="border-b last:border-0">
+                                                            <td className="px-4 py-3">{row.category_label}</td>
+                                                            <td className="px-4 py-3 text-right">{row.transaction_count}</td>
+                                                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                                {formatAmount(row.gross_total)}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                                {formatAmount(row.net_total)}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                                {formatAmount(row.tax_total)}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                                {formatAmount(row.deductible_tax_total)}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="overflow-x-auto rounded-lg border">
+                                        <table className="w-full text-sm">
+                                            <tbody>
+                                                <tr className="border-b">
+                                                    <td className="px-4 py-3 font-medium">売上税額合計</td>
+                                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                        {formatAmount(reports.consumption_tax.summary.output_tax_total)}
+                                                    </td>
+                                                </tr>
+                                                <tr className="border-b">
+                                                    <td className="px-4 py-3 font-medium">仕入税額合計（控除対象）</td>
+                                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                        {formatAmount(reports.consumption_tax.summary.input_tax_total)}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="px-4 py-3 font-medium">納付税額見込</td>
+                                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                        {formatAmount(reports.consumption_tax.summary.estimated_tax_payable)}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             ) : (
                                 <EmptyReport />

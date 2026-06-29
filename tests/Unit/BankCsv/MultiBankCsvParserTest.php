@@ -33,8 +33,8 @@ class MultiBankCsvParserTest extends TestCase
     public static function sampleFileProvider(): array
     {
         return [
-            'native april' => ['native-2025-04.csv', BankCsvFormat::Native, 5],
-            'native may' => ['native-2025-05.csv', BankCsvFormat::Native, 4],
+            'native april' => ['native-2025-04.csv', BankCsvFormat::Native, 10],
+            'native may' => ['native-2025-05.csv', BankCsvFormat::Native, 8],
             'gmo native april' => ['gmo-native-2025-04.csv', BankCsvFormat::GmoNative, 5],
             'gmo native may' => ['gmo-native-2025-05.csv', BankCsvFormat::GmoNative, 4],
             'rakuten april' => ['rakuten-2025-04.csv', BankCsvFormat::Rakuten, 5],

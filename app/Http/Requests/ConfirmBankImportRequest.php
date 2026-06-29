@@ -4,12 +4,15 @@ namespace App\Http\Requests;
 
 use App\Models\Account;
 use App\Models\BankImportRow;
+use App\Http\Requests\Concerns\ValidatesConsumptionTax;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class ConfirmBankImportRequest extends FormRequest
 {
+    use ValidatesConsumptionTax;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -19,6 +22,8 @@ class ConfirmBankImportRequest extends FormRequest
             'rows' => ['required', 'array', 'min:1'],
             'rows.*.row_id' => ['required', 'integer'],
             'rows.*.account_id' => ['nullable', 'integer', 'exists:accounts,id'],
+            'rows.*.consumption_tax_category' => ['nullable', 'string'],
+            'rows.*.has_qualified_invoice' => ['nullable', 'boolean'],
         ];
     }
 
@@ -26,8 +31,8 @@ class ConfirmBankImportRequest extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $company = $this->user()?->ensureCompany();
-
             $bankImport = $this->route('bankImport');
+
             $expenseAccountIds = Account::expenseAccounts()->pluck('id')->all();
 
             foreach ($this->input('rows', []) as $index => $rowData) {

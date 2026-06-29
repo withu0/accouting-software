@@ -25,7 +25,13 @@ interface AccountItem {
     name: string;
     type: string;
     display_order: number;
+    default_consumption_tax_category?: string | null;
     is_in_use: boolean;
+}
+
+interface TaxCategoryOption {
+    value: string;
+    label: string;
 }
 
 interface AccountTypeOption {
@@ -36,6 +42,7 @@ interface AccountTypeOption {
 interface Props {
     accountGroups: Record<string, AccountItem[]>;
     accountTypes: AccountTypeOption[];
+    taxCategoryOptions: Record<string, TaxCategoryOption[]>;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -44,7 +51,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: '勘定科目設定', href: route('accounts.edit') },
 ];
 
-export default function AccountSettings({ accountGroups, accountTypes }: Props) {
+export default function AccountSettings({ accountGroups, accountTypes, taxCategoryOptions }: Props) {
     const { flash, errors } = usePage<SharedData & { flash?: { success?: string }; errors?: Record<string, string> }>().props;
     const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
     const [activeTab, setActiveTab] = useState('expense');
@@ -56,6 +63,7 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
         code: '',
         name: '',
         type: 'expense',
+        default_consumption_tax_category: 'taxable_purchase_10',
     });
 
     const editForm = useForm({
@@ -63,7 +71,10 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
         name: '',
         type: 'expense',
         display_order: 1,
+        default_consumption_tax_category: '',
     });
+
+    const optionsForType = (type: string) => taxCategoryOptions[type] ?? [];
 
     const submitCreate: FormEventHandler = (e) => {
         e.preventDefault();
@@ -81,6 +92,7 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
             name: account.name,
             type: account.type,
             display_order: account.display_order,
+            default_consumption_tax_category: account.default_consumption_tax_category ?? '',
         });
     };
 
@@ -162,7 +174,12 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
                             <Select
                                 value={createForm.data.type}
                                 onValueChange={(v) => {
-                                    createForm.setData('type', v);
+                                    const defaultCategory = optionsForType(v)[0]?.value ?? 'out_of_scope';
+                                    createForm.setData({
+                                        ...createForm.data,
+                                        type: v,
+                                        default_consumption_tax_category: defaultCategory,
+                                    });
                                     setActiveTab(v);
                                 }}
                             >
@@ -178,6 +195,26 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
                                 </SelectContent>
                             </Select>
                             <InputError message={createForm.errors.type} />
+                        </div>
+
+                        <div className="grid gap-2 sm:col-span-4">
+                            <Label htmlFor="create_tax_category">デフォルト税区分</Label>
+                            <Select
+                                value={createForm.data.default_consumption_tax_category}
+                                onValueChange={(v) => createForm.setData('default_consumption_tax_category', v)}
+                            >
+                                <SelectTrigger id="create_tax_category">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {optionsForType(createForm.data.type).map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={createForm.errors.default_consumption_tax_category} />
                         </div>
 
                         <div className="sm:col-span-4">
@@ -215,6 +252,7 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
                                 <tr className="bg-muted/50 border-b">
                                     <th className="px-4 py-3 text-left font-medium">コード</th>
                                     <th className="px-4 py-3 text-left font-medium">科目名</th>
+                                    <th className="px-4 py-3 text-left font-medium">デフォルト税区分</th>
                                     <th className="px-4 py-3 text-right font-medium">表示順</th>
                                     <th className="px-4 py-3 text-right font-medium">操作</th>
                                 </tr>
@@ -222,7 +260,7 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
                             <tbody>
                                 {activeAccounts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="text-muted-foreground px-4 py-8 text-center">
+                                        <td colSpan={5} className="text-muted-foreground px-4 py-8 text-center">
                                             この区分の勘定科目はありません
                                         </td>
                                     </tr>
@@ -231,6 +269,11 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
                                         <tr key={account.id} className="border-b last:border-0">
                                             <td className="px-4 py-3 font-mono">{account.code}</td>
                                             <td className="px-4 py-3">{account.name}</td>
+                                            <td className="text-muted-foreground px-4 py-3">
+                                                {optionsForType(account.type).find(
+                                                    (option) => option.value === account.default_consumption_tax_category,
+                                                )?.label ?? '—'}
+                                            </td>
                                             <td className="px-4 py-3 text-right">{account.display_order}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex justify-end gap-2">
@@ -290,7 +333,14 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
 
                             <div className="grid gap-2">
                                 <Label htmlFor="edit_type">区分</Label>
-                                <Select value={editForm.data.type} onValueChange={(v) => editForm.setData('type', v)}>
+                                <Select value={editForm.data.type} onValueChange={(v) => {
+                                    const defaultCategory = optionsForType(v)[0]?.value ?? 'out_of_scope';
+                                    editForm.setData({
+                                        ...editForm.data,
+                                        type: v,
+                                        default_consumption_tax_category: defaultCategory,
+                                    });
+                                }}>
                                     <SelectTrigger id="edit_type">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -303,6 +353,26 @@ export default function AccountSettings({ accountGroups, accountTypes }: Props) 
                                     </SelectContent>
                                 </Select>
                                 <InputError message={editForm.errors.type} />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="edit_tax_category">デフォルト税区分</Label>
+                                <Select
+                                    value={editForm.data.default_consumption_tax_category}
+                                    onValueChange={(v) => editForm.setData('default_consumption_tax_category', v)}
+                                >
+                                    <SelectTrigger id="edit_tax_category">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {optionsForType(editForm.data.type).map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={editForm.errors.default_consumption_tax_category} />
                             </div>
 
                             <div className="grid gap-2">

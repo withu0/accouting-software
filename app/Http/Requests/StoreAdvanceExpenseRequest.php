@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesConsumptionTax;
 use App\Models\Account;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -9,17 +10,19 @@ use Illuminate\Validation\Validator;
 
 class StoreAdvanceExpenseRequest extends FormRequest
 {
+    use ValidatesConsumptionTax;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        return [
+        return array_merge([
             'entry_date' => ['required', 'date'],
             'amount' => ['required', 'integer', 'min:1'],
             'description' => ['required', 'string', 'max:255'],
             'account_id' => ['required', 'integer', 'exists:accounts,id'],
-        ];
+        ], $this->consumptionTaxRules());
     }
 
     public function withValidator(Validator $validator): void

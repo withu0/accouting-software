@@ -3,6 +3,7 @@ import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate, toDateInputValue } from '@/lib/dates';
 import { type BreadcrumbItem, type Company } from '@/types';
@@ -17,10 +18,20 @@ interface FiscalYear {
     is_active: boolean;
 }
 
+interface TaxOption {
+    value: string;
+    label: string;
+}
+
 interface Props {
-    company: Company;
+    company: Company & {
+        consumption_tax_method?: string;
+        simplified_tax_industry?: string | null;
+    };
     fiscalYears: FiscalYear[];
     activeFiscalYear: FiscalYear | null;
+    consumptionTaxMethods: TaxOption[];
+    simplifiedTaxIndustries: TaxOption[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -28,13 +39,21 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: '会計期間設定', href: route('fiscal-year.edit') },
 ];
 
-export default function FiscalYearSettings({ company, fiscalYears, activeFiscalYear }: Props) {
+export default function FiscalYearSettings({
+    company,
+    fiscalYears,
+    activeFiscalYear,
+    consumptionTaxMethods,
+    simplifiedTaxIndustries,
+}: Props) {
     const isUpdate = activeFiscalYear !== null;
 
     const companyForm = useForm({
         name: company.name ?? '',
         representative_name: company.representative_name ?? '',
         address: company.address ?? '',
+        consumption_tax_method: company.consumption_tax_method ?? 'standard',
+        simplified_tax_industry: company.simplified_tax_industry ?? '',
     });
 
     const fiscalYearForm = useForm({
@@ -98,6 +117,48 @@ export default function FiscalYearSettings({ company, fiscalYears, activeFiscalY
                             />
                             <InputError message={companyForm.errors.address} />
                         </div>
+
+                        <div className="grid gap-2">
+                            <Label htmlFor="consumption_tax_method">課税方式</Label>
+                            <Select
+                                value={companyForm.data.consumption_tax_method}
+                                onValueChange={(v) => companyForm.setData('consumption_tax_method', v)}
+                            >
+                                <SelectTrigger id="consumption_tax_method">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {consumptionTaxMethods.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <InputError message={companyForm.errors.consumption_tax_method} />
+                        </div>
+
+                        {companyForm.data.consumption_tax_method === 'simplified' && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="simplified_tax_industry">簡易課税業種</Label>
+                                <Select
+                                    value={companyForm.data.simplified_tax_industry}
+                                    onValueChange={(v) => companyForm.setData('simplified_tax_industry', v)}
+                                >
+                                    <SelectTrigger id="simplified_tax_industry">
+                                        <SelectValue placeholder="業種を選択" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {simplifiedTaxIndustries.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={companyForm.errors.simplified_tax_industry} />
+                            </div>
+                        )}
 
                         <div className="flex items-center gap-4">
                             <Button type="submit" disabled={companyForm.processing}>

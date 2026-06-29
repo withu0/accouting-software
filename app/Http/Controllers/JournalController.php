@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesCompany;
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Http\Requests\UpdateBankImportJournalRequest;
 use App\Models\Account;
@@ -65,6 +66,9 @@ class JournalController extends Controller
                     'is_deposit' => $isDeposit,
                     'amount' => $isDeposit ? $row->deposit_amount : $row->withdrawal_amount,
                     'account_id' => $accountId,
+                    'consumption_tax_category' => $entry->consumption_tax_category?->value
+                        ?? ($isDeposit ? ConsumptionTaxCategory::TaxableSales10->value : ConsumptionTaxCategory::TaxablePurchase10->value),
+                    'has_qualified_invoice' => $entry->has_qualified_invoice ?? true,
                 ];
             }
 
@@ -74,6 +78,12 @@ class JournalController extends Controller
         return Inertia::render('journals/index', [
             'entries' => $entries,
             'accountGroups' => Account::groupedForSelect(),
+            'expenseAccounts' => Account::expenseAccounts()->map(fn (Account $account) => [
+                'id' => $account->id,
+                'default_consumption_tax_category' => $account->default_consumption_tax_category?->value,
+            ]),
+            'salesTaxCategories' => ConsumptionTaxCategory::optionsForSales(),
+            'purchaseTaxCategories' => ConsumptionTaxCategory::optionsForPurchases(),
             'hasActiveFiscalYear' => $activeFiscalYear !== null,
         ]);
     }

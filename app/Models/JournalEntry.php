@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,8 @@ class JournalEntry extends Model
         'description',
         'source',
         'idempotency_key',
+        'consumption_tax_category',
+        'has_qualified_invoice',
     ];
 
     protected function casts(): array
@@ -24,6 +27,8 @@ class JournalEntry extends Model
         return [
             'entry_date' => 'date',
             'source' => JournalSource::class,
+            'consumption_tax_category' => ConsumptionTaxCategory::class,
+            'has_qualified_invoice' => 'boolean',
         ];
     }
 

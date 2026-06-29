@@ -115,6 +115,23 @@ class ReportControllerTest extends TestCase
         ];
     }
 
+    public function test_consumption_tax_csv_export_returns_csv_response(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->get(route('reports.export', ['type' => 'consumption_tax', 'format' => 'csv']));
+
+        $response->assertOk();
+        $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('税区分', $response->streamedContent());
+    }
+
+    public function test_consumption_tax_pdf_export_returns_404(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('reports.export', ['type' => 'consumption_tax', 'format' => 'pdf']))
+            ->assertNotFound();
+    }
+
     public function test_invalid_report_type_returns_404(): void
     {
         $this->actingAs($this->user)

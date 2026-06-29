@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ConsumptionTaxCategory;
 use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Enums\BankImportRowStatus;
 use App\Http\Requests\ConfirmBankImportRequest;
@@ -95,6 +96,12 @@ class BankImportController extends Controller
                     ? Account::findByName('売上高')->id
                     : $suggestedAccountId;
 
+                $defaultCategory = $isDeposit
+                    ? ConsumptionTaxCategory::TaxableSales10->value
+                    : ($accountId !== null
+                        ? (Account::find($accountId)?->default_consumption_tax_category?->value ?? ConsumptionTaxCategory::TaxablePurchase10->value)
+                        : ConsumptionTaxCategory::TaxablePurchase10->value);
+
                 return [
                     'id' => $row->id,
                     'transaction_date' => $row->transaction_date->format('Y-m-d'),
@@ -105,12 +112,15 @@ class BankImportController extends Controller
                     'is_deposit' => $isDeposit,
                     'suggested_account_id' => $suggestedAccountId,
                     'account_id' => $accountId,
+                    'consumption_tax_category' => $defaultCategory,
+                    'has_qualified_invoice' => true,
                 ];
             });
 
         $expenseAccounts = Account::expenseAccounts()->map(fn (Account $account) => [
             'id' => $account->id,
             'name' => $account->name,
+            'default_consumption_tax_category' => $account->default_consumption_tax_category?->value,
         ]);
 
         return Inertia::render('bank-import/review', [
@@ -121,6 +131,8 @@ class BankImportController extends Controller
             'rows' => $pendingRows,
             'expenseAccounts' => $expenseAccounts,
             'accountGroups' => Account::groupedForSelect(),
+            'salesTaxCategories' => ConsumptionTaxCategory::optionsForSales(),
+            'purchaseTaxCategories' => ConsumptionTaxCategory::optionsForPurchases(),
             'hasActiveFiscalYear' => $company->activeFiscalYear() !== null,
             'importSummary' => session('importSummary'),
         ]);
@@ -237,6 +249,8 @@ class BankImportController extends Controller
                     'status' => $row->status->value,
                     'account_id' => $accountId,
                     'journal_entry_id' => $row->journal_entry_id,
+                    'consumption_tax_category' => $row->journalEntry?->consumption_tax_category?->value,
+                    'has_qualified_invoice' => $row->journalEntry?->has_qualified_invoice ?? true,
                 ];
             });
 
@@ -249,6 +263,8 @@ class BankImportController extends Controller
             ],
             'rows' => $rows,
             'accountGroups' => Account::groupedForSelect(),
+            'salesTaxCategories' => ConsumptionTaxCategory::optionsForSales(),
+            'purchaseTaxCategories' => ConsumptionTaxCategory::optionsForPurchases(),
             'hasActiveFiscalYear' => $company->activeFiscalYear() !== null,
         ]);
     }

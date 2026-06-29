@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Exceptions\UnbalancedJournalException;
 use App\Models\Account;
@@ -23,6 +24,8 @@ class JournalService
         JournalSource $source,
         array $lines,
         ?string $idempotencyKey = null,
+        ?ConsumptionTaxCategory $consumptionTaxCategory = null,
+        ?bool $hasQualifiedInvoice = null,
     ): JournalEntry {
         $this->validateLines($lines);
         $this->validateIdempotencyKey($company, $idempotencyKey);
@@ -42,7 +45,7 @@ class JournalService
             throw new InvalidArgumentException('One or more account IDs are invalid.');
         }
 
-        return DB::transaction(function () use ($company, $fiscalYear, $entryDate, $description, $source, $lines, $idempotencyKey) {
+        return DB::transaction(function () use ($company, $fiscalYear, $entryDate, $description, $source, $lines, $idempotencyKey, $consumptionTaxCategory, $hasQualifiedInvoice) {
             $entry = JournalEntry::create([
                 'company_id' => $company->id,
                 'fiscal_year_id' => $fiscalYear->id,
@@ -50,6 +53,8 @@ class JournalService
                 'description' => $description,
                 'source' => $source,
                 'idempotency_key' => $idempotencyKey,
+                'consumption_tax_category' => $consumptionTaxCategory,
+                'has_qualified_invoice' => $hasQualifiedInvoice,
             ]);
 
             foreach ($lines as $line) {
@@ -73,6 +78,8 @@ class JournalService
         Carbon $entryDate,
         string $description,
         array $lines,
+        ?ConsumptionTaxCategory $consumptionTaxCategory = null,
+        ?bool $hasQualifiedInvoice = null,
     ): JournalEntry {
         $this->validateLines($lines);
 
@@ -91,11 +98,13 @@ class JournalService
             throw new InvalidArgumentException('One or more account IDs are invalid.');
         }
 
-        return DB::transaction(function () use ($entry, $fiscalYear, $entryDate, $description, $lines) {
+        return DB::transaction(function () use ($entry, $fiscalYear, $entryDate, $description, $lines, $consumptionTaxCategory, $hasQualifiedInvoice) {
             $entry->update([
                 'fiscal_year_id' => $fiscalYear->id,
                 'entry_date' => $entryDate,
                 'description' => $description,
+                'consumption_tax_category' => $consumptionTaxCategory,
+                'has_qualified_invoice' => $hasQualifiedInvoice,
             ]);
 
             $entry->lines()->delete();

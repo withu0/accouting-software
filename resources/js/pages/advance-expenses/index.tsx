@@ -1,3 +1,4 @@
+import ConsumptionTaxFields, { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { FormEventHandler, useEffect, useState } from 'react';
 interface ExpenseAccount {
     id: number;
     name: string;
+    default_consumption_tax_category?: string | null;
 }
 
 interface AdvanceExpenseEntry {
@@ -25,11 +27,14 @@ interface AdvanceExpenseEntry {
     amount: number;
     account_id: number;
     account_name: string;
+    consumption_tax_category?: string | null;
+    has_qualified_invoice?: boolean | null;
 }
 
 interface Props {
     entries: AdvanceExpenseEntry[];
     expenseAccounts: ExpenseAccount[];
+    purchaseTaxCategories: TaxCategoryOption[];
     hasActiveFiscalYear: boolean;
 }
 
@@ -45,10 +50,12 @@ function formatAmount(amount: number): string {
 function AdvanceExpenseEditDialog({
     entry,
     expenseAccounts,
+    purchaseTaxCategories,
     hasActiveFiscalYear,
 }: {
     entry: AdvanceExpenseEntry;
     expenseAccounts: ExpenseAccount[];
+    purchaseTaxCategories: TaxCategoryOption[];
     hasActiveFiscalYear: boolean;
 }) {
     const [open, setOpen] = useState(false);
@@ -59,6 +66,10 @@ function AdvanceExpenseEditDialog({
     const [description, setDescription] = useState(entry.description);
     const [amount, setAmount] = useState(String(entry.amount));
     const [accountId, setAccountId] = useState(String(entry.account_id));
+    const [consumptionTaxCategory, setConsumptionTaxCategory] = useState(
+        entry.consumption_tax_category ?? 'taxable_purchase_10',
+    );
+    const [hasQualifiedInvoice, setHasQualifiedInvoice] = useState(entry.has_qualified_invoice ?? true);
 
     useEffect(() => {
         if (open) {
@@ -66,6 +77,8 @@ function AdvanceExpenseEditDialog({
             setDescription(entry.description);
             setAmount(String(entry.amount));
             setAccountId(String(entry.account_id));
+            setConsumptionTaxCategory(entry.consumption_tax_category ?? 'taxable_purchase_10');
+            setHasQualifiedInvoice(entry.has_qualified_invoice ?? true);
             setErrors({});
         }
     }, [open, entry]);
@@ -83,6 +96,8 @@ function AdvanceExpenseEditDialog({
                 description,
                 amount: parseInt(amount, 10),
                 account_id: parseInt(accountId, 10),
+                consumption_tax_category: consumptionTaxCategory,
+                has_qualified_invoice: hasQualifiedInvoice,
             },
             {
                 preserveScroll: true,
@@ -152,7 +167,12 @@ function AdvanceExpenseEditDialog({
                         <Label htmlFor={`edit-account-${entry.id}`}>経費科目</Label>
                         <Select
                             value={accountId}
-                            onValueChange={setAccountId}
+                            onValueChange={(value) => {
+                                setAccountId(value);
+                                setConsumptionTaxCategory(
+                                    defaultCategoryForAccount(Number(value), expenseAccounts, 'taxable_purchase_10'),
+                                );
+                            }}
                             disabled={!hasActiveFiscalYear || processing}
                         >
                             <SelectTrigger id={`edit-account-${entry.id}`}>
@@ -168,6 +188,17 @@ function AdvanceExpenseEditDialog({
                         </Select>
                         <InputError message={errors.account_id} />
                     </div>
+
+                    <ConsumptionTaxFields
+                        idPrefix={`edit-tax-${entry.id}`}
+                        category={consumptionTaxCategory}
+                        hasQualifiedInvoice={hasQualifiedInvoice}
+                        categoryOptions={purchaseTaxCategories}
+                        onCategoryChange={setConsumptionTaxCategory}
+                        onQualifiedInvoiceChange={setHasQualifiedInvoice}
+                        categoryError={errors.consumption_tax_category}
+                        qualifiedInvoiceError={errors.has_qualified_invoice}
+                    />
 
                     <DialogFooter>
                         <DialogClose asChild>
@@ -185,7 +216,12 @@ function AdvanceExpenseEditDialog({
     );
 }
 
-export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActiveFiscalYear }: Props) {
+export default function AdvanceExpensesIndex({
+    entries,
+    expenseAccounts,
+    purchaseTaxCategories,
+    hasActiveFiscalYear,
+}: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
 
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -193,6 +229,8 @@ export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActi
         amount: '',
         description: '',
         account_id: '',
+        consumption_tax_category: 'taxable_purchase_10',
+        has_qualified_invoice: true,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -286,7 +324,17 @@ export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActi
                                 <Label htmlFor="account_id">経費科目</Label>
                                 <Select
                                     value={data.account_id}
-                                    onValueChange={(v) => setData('account_id', v)}
+                                    onValueChange={(v) => {
+                                        setData({
+                                            ...data,
+                                            account_id: v,
+                                            consumption_tax_category: defaultCategoryForAccount(
+                                                Number(v),
+                                                expenseAccounts,
+                                                'taxable_purchase_10',
+                                            ),
+                                        });
+                                    }}
                                     disabled={!hasActiveFiscalYear || processing}
                                 >
                                     <SelectTrigger id="account_id">
@@ -302,6 +350,17 @@ export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActi
                                 </Select>
                                 <InputError message={errors.account_id} />
                             </div>
+
+                            <ConsumptionTaxFields
+                                idPrefix="create-tax"
+                                category={data.consumption_tax_category}
+                                hasQualifiedInvoice={data.has_qualified_invoice}
+                                categoryOptions={purchaseTaxCategories}
+                                onCategoryChange={(value) => setData('consumption_tax_category', value)}
+                                onQualifiedInvoiceChange={(value) => setData('has_qualified_invoice', value)}
+                                categoryError={errors.consumption_tax_category}
+                                qualifiedInvoiceError={errors.has_qualified_invoice}
+                            />
 
                             <Button type="submit" disabled={!hasActiveFiscalYear || processing}>
                                 {processing ? '登録中...' : '登録する'}
@@ -338,6 +397,7 @@ export default function AdvanceExpensesIndex({ entries, expenseAccounts, hasActi
                                                 <AdvanceExpenseEditDialog
                                                     entry={entry}
                                                     expenseAccounts={expenseAccounts}
+                                                    purchaseTaxCategories={purchaseTaxCategories}
                                                     hasActiveFiscalYear={hasActiveFiscalYear}
                                                 />
                                                 <Dialog>
