@@ -15,7 +15,7 @@ use InvalidArgumentException;
 class JournalService
 {
     /**
-     * @param  array<int, array{account_id: int, debit: int, credit: int}>  $lines
+     * @param  array<int, array{account_id: int, debit: int, credit: int, consumption_tax_category?: ConsumptionTaxCategory|null}>  $lines
      */
     public function createBalancedEntry(
         Company $company,
@@ -62,6 +62,7 @@ class JournalService
                     'account_id' => $line['account_id'],
                     'debit' => $line['debit'],
                     'credit' => $line['credit'],
+                    'consumption_tax_category' => $line['consumption_tax_category'] ?? null,
                 ]);
             }
 
@@ -70,7 +71,7 @@ class JournalService
     }
 
     /**
-     * @param  array<int, array{account_id: int, debit: int, credit: int}>  $lines
+     * @param  array<int, array{account_id: int, debit: int, credit: int, consumption_tax_category?: ConsumptionTaxCategory|null}>  $lines
      */
     public function updateBalancedEntry(
         JournalEntry $entry,
@@ -114,6 +115,7 @@ class JournalService
                     'account_id' => $line['account_id'],
                     'debit' => $line['debit'],
                     'credit' => $line['credit'],
+                    'consumption_tax_category' => $line['consumption_tax_category'] ?? null,
                 ]);
             }
 
@@ -122,7 +124,7 @@ class JournalService
     }
 
     /**
-     * @param  array<int, array{account_id: int, debit: int, credit: int}>  $lines
+     * @param  array<int, array{account_id: int, debit: int, credit: int, consumption_tax_category?: ConsumptionTaxCategory|null}>  $lines
      */
     public function validateLines(array $lines): void
     {

@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Enums\ConsumptionTaxCategory;
 use App\Enums\ConsumptionTaxMethod;
-use App\Models\Account;
 use App\Models\Company;
 use App\Models\FiscalYear;
 use App\Models\JournalEntry;
@@ -42,7 +41,10 @@ class ConsumptionTaxReportService
     {
         $entries = $company->journalEntries()
             ->where('fiscal_year_id', $fiscalYear->id)
-            ->whereNotNull('consumption_tax_category')
+            ->where(function ($query) {
+                $query->whereNotNull('consumption_tax_category')
+                    ->orWhereHas('lines', fn ($lines) => $lines->whereNotNull('consumption_tax_category'));
+            })
             ->with(['lines.account'])
             ->orderBy('entry_date')
             ->get();
@@ -51,43 +53,25 @@ class ConsumptionTaxReportService
         $aggregated = [];
 
         foreach ($entries as $entry) {
+            if ($this->hasLineLevelTax($entry)) {
+                $this->aggregateLineLevelEntry($entry, $aggregated);
+
+                continue;
+            }
+
             $baseCategory = $entry->consumption_tax_category;
             if ($baseCategory === null) {
                 continue;
             }
 
             $gross = $this->resolveGrossAmount($entry);
-            $effective = $this->consumptionTaxService->resolveEffectiveCategory(
-                $baseCategory,
-                $entry->has_qualified_invoice,
-                Carbon::parse($entry->entry_date),
-            );
-            $split = $this->consumptionTaxService->summarizeEntry(
+            $this->aggregateAmount(
+                $aggregated,
                 $baseCategory,
                 $entry->has_qualified_invoice,
                 Carbon::parse($entry->entry_date),
                 $gross,
             );
-
-            $key = $split['effective_category'];
-
-            if (! isset($aggregated[$key])) {
-                $aggregated[$key] = [
-                    'category' => $split['effective_category'],
-                    'category_label' => $split['effective_category_label'],
-                    'transaction_count' => 0,
-                    'gross_total' => 0,
-                    'net_total' => 0,
-                    'tax_total' => 0,
-                    'deductible_tax_total' => 0,
-                ];
-            }
-
-            $aggregated[$key]['transaction_count']++;
-            $aggregated[$key]['gross_total'] += $split['gross'];
-            $aggregated[$key]['net_total'] += $split['net'];
-            $aggregated[$key]['tax_total'] += $split['tax'];
-            $aggregated[$key]['deductible_tax_total'] += $split['deductible_tax'];
         }
 
         $rows = array_values($aggregated);
@@ -123,6 +107,74 @@ class ConsumptionTaxReportService
                 'estimated_tax_payable' => $estimatedPayable,
             ],
         ];
+    }
+
+    /**
+     * @param  array<string, array{category: string, category_label: string, transaction_count: int, gross_total: int, net_total: int, tax_total: int, deductible_tax_total: int}>  $aggregated
+     */
+    private function aggregateLineLevelEntry(JournalEntry $entry, array &$aggregated): void
+    {
+        foreach ($entry->lines as $line) {
+            if ($line->consumption_tax_category === null) {
+                continue;
+            }
+
+            $gross = max($line->debit, $line->credit);
+            if ($gross === 0) {
+                continue;
+            }
+
+            $this->aggregateAmount(
+                $aggregated,
+                $line->consumption_tax_category,
+                $entry->has_qualified_invoice,
+                Carbon::parse($entry->entry_date),
+                $gross,
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, array{category: string, category_label: string, transaction_count: int, gross_total: int, net_total: int, tax_total: int, deductible_tax_total: int}>  $aggregated
+     */
+    private function aggregateAmount(
+        array &$aggregated,
+        ConsumptionTaxCategory $baseCategory,
+        ?bool $hasQualifiedInvoice,
+        Carbon $entryDate,
+        int $gross,
+    ): void {
+        $split = $this->consumptionTaxService->summarizeEntry(
+            $baseCategory,
+            $hasQualifiedInvoice,
+            $entryDate,
+            $gross,
+        );
+
+        $key = $split['effective_category'];
+
+        if (! isset($aggregated[$key])) {
+            $aggregated[$key] = [
+                'category' => $split['effective_category'],
+                'category_label' => $split['effective_category_label'],
+                'transaction_count' => 0,
+                'gross_total' => 0,
+                'net_total' => 0,
+                'tax_total' => 0,
+                'deductible_tax_total' => 0,
+            ];
+        }
+
+        $aggregated[$key]['transaction_count']++;
+        $aggregated[$key]['gross_total'] += $split['gross'];
+        $aggregated[$key]['net_total'] += $split['net'];
+        $aggregated[$key]['tax_total'] += $split['tax'];
+        $aggregated[$key]['deductible_tax_total'] += $split['deductible_tax'];
+    }
+
+    private function hasLineLevelTax(JournalEntry $entry): bool
+    {
+        return $entry->lines->contains(fn ($line) => $line->consumption_tax_category !== null);
     }
 
     private function resolveGrossAmount(JournalEntry $entry): int

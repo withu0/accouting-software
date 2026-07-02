@@ -2,28 +2,36 @@
 
 namespace App\Http\Requests;
 
-use App\Http\Requests\Concerns\ValidatesConsumptionTax;
+use App\Enums\ConsumptionTaxCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class StoreTransferJournalRequest extends FormRequest
 {
-    use ValidatesConsumptionTax;
-
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        return array_merge([
+        $transferTaxValues = array_map(
+            fn (ConsumptionTaxCategory $case) => $case->value,
+            [ConsumptionTaxCategory::OutOfScope, ConsumptionTaxCategory::NonTaxable],
+        );
+
+        return [
             'entry_date' => ['required', 'date'],
-            'debit_account_id' => ['required', 'integer', 'exists:accounts,id'],
-            'debit_amount' => ['required', 'integer', 'min:1'],
-            'credit_account_id' => ['required', 'integer', 'exists:accounts,id', 'different:debit_account_id'],
-            'credit_amount' => ['required', 'integer', 'min:1'],
             'description' => ['required', 'string', 'max:255'],
-        ], $this->consumptionTaxRules());
+            'lines' => ['required', 'array', 'min:2'],
+            'lines.*.account_id' => ['required', 'integer', 'exists:accounts,id'],
+            'lines.*.debit' => ['required', 'integer', 'min:0'],
+            'lines.*.credit' => ['required', 'integer', 'min:0'],
+            'lines.*.consumption_tax_category' => [
+                'required',
+                Rule::in($transferTaxValues),
+            ],
+        ];
     }
 
     public function withValidator(Validator $validator): void
@@ -48,11 +56,36 @@ class StoreTransferJournalRequest extends FormRequest
                 }
             }
 
-            $debitAmount = (int) $this->input('debit_amount', 0);
-            $creditAmount = (int) $this->input('credit_amount', 0);
+            $lines = $this->input('lines', []);
+            if (! is_array($lines)) {
+                return;
+            }
 
-            if ($debitAmount > 0 && $creditAmount > 0 && $debitAmount !== $creditAmount) {
-                $validator->errors()->add('credit_amount', '借方金額と貸方金額は一致している必要があります。');
+            $totalDebit = 0;
+            $totalCredit = 0;
+
+            foreach ($lines as $index => $line) {
+                if (! is_array($line)) {
+                    continue;
+                }
+
+                $debit = (int) ($line['debit'] ?? 0);
+                $credit = (int) ($line['credit'] ?? 0);
+
+                if (($debit > 0 && $credit > 0) || ($debit === 0 && $credit === 0)) {
+                    $validator->errors()->add("lines.{$index}.debit", '各行は借方または貸方のいずれか一方に金額を入力してください。');
+                }
+
+                $totalDebit += $debit;
+                $totalCredit += $credit;
+            }
+
+            if ($totalDebit > 0 && $totalCredit > 0 && $totalDebit !== $totalCredit) {
+                $validator->errors()->add('lines', '借方合計と貸方合計が一致していません。');
+            }
+
+            if ($totalDebit === 0 && $totalCredit === 0) {
+                $validator->errors()->add('lines', '金額を入力してください。');
             }
         });
     }
@@ -64,14 +97,11 @@ class StoreTransferJournalRequest extends FormRequest
     {
         return [
             'entry_date.required' => '日付を入力してください。',
-            'debit_account_id.required' => '借方科目を選択してください。',
-            'debit_amount.required' => '借方金額を入力してください。',
-            'debit_amount.min' => '借方金額は1円以上で入力してください。',
-            'credit_account_id.required' => '貸方科目を選択してください。',
-            'credit_account_id.different' => '借方科目と貸方科目は異なる必要があります。',
-            'credit_amount.required' => '貸方金額を入力してください。',
-            'credit_amount.min' => '貸方金額は1円以上で入力してください。',
             'description.required' => '摘要を入力してください。',
+            'lines.required' => '仕訳行を入力してください。',
+            'lines.min' => '仕訳行は2行以上必要です。',
+            'lines.*.account_id.required' => '勘定科目を選択してください。',
+            'lines.*.consumption_tax_category.required' => '税区分を選択してください。',
         ];
     }
 }

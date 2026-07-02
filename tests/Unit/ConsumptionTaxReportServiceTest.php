@@ -101,4 +101,53 @@ class ConsumptionTaxReportServiceTest extends TestCase
         $this->assertNotNull($purchaseRow);
         $this->assertSame(800, $purchaseRow['deductible_tax_total']);
     }
+
+    public function test_aggregate_supports_line_level_transfer_tax(): void
+    {
+        $accountsReceivable = Account::where('name', '売掛金')->firstOrFail();
+        $accountsPayable = Account::where('name', '買掛金')->firstOrFail();
+
+        $this->journalService->createBalancedEntry(
+            $this->company,
+            Carbon::parse('2025-05-03'),
+            '振替',
+            JournalSource::Transfer,
+            [
+                [
+                    'account_id' => $accountsReceivable->id,
+                    'debit' => 10000,
+                    'credit' => 0,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+                ],
+                [
+                    'account_id' => $accountsPayable->id,
+                    'debit' => 0,
+                    'credit' => 5000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+                ],
+                [
+                    'account_id' => $accountsReceivable->id,
+                    'debit' => 0,
+                    'credit' => 5000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::NonTaxable,
+                ],
+            ],
+            null,
+            null,
+            null,
+        );
+
+        $report = $this->reportService->aggregate($this->company, $this->fiscalYear);
+
+        $outOfScopeRow = collect($report['rows'])->firstWhere('category', ConsumptionTaxCategory::OutOfScope->value);
+        $nonTaxableRow = collect($report['rows'])->firstWhere('category', ConsumptionTaxCategory::NonTaxable->value);
+
+        $this->assertNotNull($outOfScopeRow);
+        $this->assertSame(2, $outOfScopeRow['transaction_count']);
+        $this->assertSame(15000, $outOfScopeRow['gross_total']);
+
+        $this->assertNotNull($nonTaxableRow);
+        $this->assertSame(1, $nonTaxableRow['transaction_count']);
+        $this->assertSame(5000, $nonTaxableRow['gross_total']);
+    }
 }

@@ -1,18 +1,23 @@
-import ConsumptionTaxFields, { type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import InputError from '@/components/input-error';
+import TransferJournalRowTable, {
+    createEmptyRow,
+    flattenRowsToLines,
+    sumRowTotals,
+    type TransferJournalRow,
+} from '@/components/transfer-journal-row-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { AlertCircle, CheckCircle2, Receipt, Trash2 } from 'lucide-react';
-import { FormEventHandler, useMemo } from 'react';
+import { FormEventHandler, useMemo, useState } from 'react';
 
 interface TransferPreset {
     id: string;
@@ -22,18 +27,24 @@ interface TransferPreset {
     description: string;
 }
 
+interface TransferEntryLine {
+    account_name: string;
+    debit: number;
+    credit: number;
+    consumption_tax_category?: string | null;
+}
+
 interface TransferEntry {
     id: number;
     entry_date: string;
     description: string;
     amount: number;
-    debit_account_name: string;
-    credit_account_name: string;
+    lines: TransferEntryLine[];
 }
 
 interface Props {
     entries: TransferEntry[];
-    accountGroups: Record<string, { id: number; name: string }[]>;
+    accountGroups: Record<string, { id: number; name: string; default_consumption_tax_category?: string | null }[]>;
     presets: TransferPreset[];
     transferTaxCategories: TaxCategoryOption[];
     hasActiveFiscalYear: boolean;
@@ -49,6 +60,14 @@ function formatAmount(amount: number): string {
     return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
 }
 
+function taxCategoryLabel(value: string | null | undefined, options: TaxCategoryOption[]): string {
+    if (!value) {
+        return '—';
+    }
+
+    return options.find((option) => option.value === value)?.label ?? value;
+}
+
 export default function TransferJournal({
     entries,
     accountGroups,
@@ -57,42 +76,75 @@ export default function TransferJournal({
     hasActiveFiscalYear,
 }: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
+    const [rows, setRows] = useState<TransferJournalRow[]>([createEmptyRow()]);
 
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors, reset, transform } = useForm({
         entry_date: '',
-        debit_account_id: '',
-        debit_amount: '',
-        credit_account_id: '',
-        credit_amount: '',
         description: '',
-        consumption_tax_category: 'out_of_scope',
+        lines: [] as Array<{
+            account_id: number;
+            debit: number;
+            credit: number;
+            consumption_tax_category: string;
+        }>,
     });
 
+    transform((formData) => ({
+        ...formData,
+        lines: flattenRowsToLines(rows),
+    }));
+
+    const { debitTotal, creditTotal } = useMemo(() => sumRowTotals(rows), [rows]);
+
     const amountsMismatch = useMemo(() => {
-        const debit = parseInt(data.debit_amount, 10);
-        const credit = parseInt(data.credit_amount, 10);
-        if (!data.debit_amount || !data.credit_amount) {
+        if (debitTotal === 0 && creditTotal === 0) {
             return false;
         }
-        return debit !== credit;
-    }, [data.debit_amount, data.credit_amount]);
+
+        return debitTotal !== creditTotal;
+    }, [debitTotal, creditTotal]);
+
+    const shortageAmount = useMemo(() => {
+        if (!amountsMismatch) {
+            return 0;
+        }
+
+        return Math.abs(debitTotal - creditTotal);
+    }, [amountsMismatch, debitTotal, creditTotal]);
 
     const applyPreset = (preset: TransferPreset) => {
+        setRows([
+            {
+                key: crypto.randomUUID(),
+                debit: {
+                    account_id: String(preset.debit_account_id),
+                    amount: '',
+                    consumption_tax_category: 'out_of_scope',
+                },
+                credit: {
+                    account_id: String(preset.credit_account_id),
+                    amount: '',
+                    consumption_tax_category: 'out_of_scope',
+                },
+            },
+        ]);
         setData({
             ...data,
-            debit_account_id: String(preset.debit_account_id),
-            credit_account_id: String(preset.credit_account_id),
             description: preset.description,
-            debit_amount: '',
-            credit_amount: '',
         });
+    };
+
+    const resetForm = () => {
+        reset();
+        setRows([createEmptyRow()]);
     };
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+
         post(route('transfer-journal.store'), {
             preserveScroll: true,
-            onSuccess: () => reset(),
+            onSuccess: () => resetForm(),
         });
     };
 
@@ -125,13 +177,13 @@ export default function TransferJournal({
                     </Alert>
                 )}
 
-                <Card className="max-w-2xl">
+                <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
                             <Receipt className="size-5" />
                             振替伝票を登録
                         </CardTitle>
-                        <CardDescription>日付・借方・貸方・摘要を入力してください</CardDescription>
+                        <CardDescription>発生日・借方・貸方・摘要を入力してください</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {presets.length > 0 && (
@@ -152,8 +204,8 @@ export default function TransferJournal({
                         )}
 
                         <form onSubmit={submit} className="space-y-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="entry_date">日付</Label>
+                            <div className="grid gap-2 max-w-xs">
+                                <Label htmlFor="entry_date">発生日</Label>
                                 <Input
                                     id="entry_date"
                                     type="date"
@@ -165,98 +217,41 @@ export default function TransferJournal({
                                 <InputError message={errors.entry_date} />
                             </div>
 
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="debit_account_id">借方科目</Label>
-                                    <Select
-                                        value={data.debit_account_id}
-                                        onValueChange={(v) => setData('debit_account_id', v)}
-                                        disabled={!hasActiveFiscalYear || processing}
-                                    >
-                                        <SelectTrigger id="debit_account_id">
-                                            <SelectValue placeholder="借方科目を選択" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {Object.entries(accountGroups).map(([groupLabel, accounts]) => (
-                                                <SelectGroup key={groupLabel}>
-                                                    <SelectLabel>{groupLabel}</SelectLabel>
-                                                    {accounts.map((account) => (
-                                                        <SelectItem key={account.id} value={String(account.id)}>
-                                                            {account.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectGroup>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError message={errors.debit_account_id} />
-                                </div>
+                            <TransferJournalRowTable
+                                rows={rows}
+                                accountGroups={accountGroups}
+                                transferTaxCategories={transferTaxCategories}
+                                disabled={!hasActiveFiscalYear || processing}
+                                lineErrors={
+                                    typeof errors.lines === 'string'
+                                        ? { lines: errors.lines }
+                                        : Object.fromEntries(
+                                              Object.entries(errors).filter(([key]) => key.startsWith('lines.')),
+                                          )
+                                }
+                                onChange={setRows}
+                            />
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="debit_amount">借方金額</Label>
-                                    <Input
-                                        id="debit_amount"
-                                        type="number"
-                                        min="1"
-                                        value={data.debit_amount}
-                                        disabled={!hasActiveFiscalYear || processing}
-                                        onChange={(e) => setData('debit_amount', e.target.value)}
-                                        required
-                                    />
-                                    <InputError message={errors.debit_amount} />
-                                </div>
-                            </div>
-
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="credit_account_id">貸方科目</Label>
-                                    <Select
-                                        value={data.credit_account_id}
-                                        onValueChange={(v) => setData('credit_account_id', v)}
-                                        disabled={!hasActiveFiscalYear || processing}
-                                    >
-                                        <SelectTrigger id="credit_account_id">
-                                            <SelectValue placeholder="貸方科目を選択" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {Object.entries(accountGroups).map(([groupLabel, accounts]) => (
-                                                <SelectGroup key={groupLabel}>
-                                                    <SelectLabel>{groupLabel}</SelectLabel>
-                                                    {accounts.map((account) => (
-                                                        <SelectItem key={account.id} value={String(account.id)}>
-                                                            {account.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectGroup>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError message={errors.credit_account_id} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor="credit_amount">貸方金額</Label>
-                                    <Input
-                                        id="credit_amount"
-                                        type="number"
-                                        min="1"
-                                        value={data.credit_amount}
-                                        disabled={!hasActiveFiscalYear || processing}
-                                        onChange={(e) => setData('credit_amount', e.target.value)}
-                                        required
-                                    />
-                                    <InputError message={errors.credit_amount} />
-                                </div>
+                            <div className="flex flex-wrap items-center gap-4 text-sm">
+                                <span>
+                                    借方合計: <strong>{formatAmount(debitTotal)}</strong>
+                                </span>
+                                <span>
+                                    貸方合計: <strong>{formatAmount(creditTotal)}</strong>
+                                </span>
+                                {amountsMismatch && (
+                                    <span className="text-destructive font-medium">不足額: {formatAmount(shortageAmount)}</span>
+                                )}
                             </div>
 
                             {amountsMismatch && (
                                 <Alert variant="destructive">
                                     <AlertCircle className="size-4" />
-                                    <AlertDescription>借方金額と貸方金額が一致していません。</AlertDescription>
+                                    <AlertDescription>借方合計と貸方合計が一致していません。</AlertDescription>
                                 </Alert>
                             )}
 
-                            <div className="grid gap-2">
+                            <div className="grid gap-2 max-w-xl">
                                 <Label htmlFor="description">摘要</Label>
                                 <Input
                                     id="description"
@@ -269,18 +264,10 @@ export default function TransferJournal({
                                 <InputError message={errors.description} />
                             </div>
 
-                            <ConsumptionTaxFields
-                                idPrefix="transfer-tax"
-                                category={data.consumption_tax_category}
-                                hasQualifiedInvoice={true}
-                                categoryOptions={transferTaxCategories}
-                                onCategoryChange={(value) => setData('consumption_tax_category', value)}
-                                onQualifiedInvoiceChange={() => undefined}
-                                showQualifiedInvoice={false}
-                                categoryError={errors.consumption_tax_category}
-                            />
-
-                            <Button type="submit" disabled={!hasActiveFiscalYear || processing || amountsMismatch}>
+                            <Button
+                                type="submit"
+                                disabled={!hasActiveFiscalYear || processing || amountsMismatch || debitTotal === 0}
+                            >
                                 {processing ? '登録中...' : '登録する'}
                             </Button>
                         </form>
@@ -298,19 +285,46 @@ export default function TransferJournal({
                                     <tr className="bg-muted/50 border-b">
                                         <th className="px-4 py-3 text-left font-medium">日付</th>
                                         <th className="px-4 py-3 text-left font-medium">摘要</th>
-                                        <th className="px-4 py-3 text-left font-medium">借方科目</th>
-                                        <th className="px-4 py-3 text-left font-medium">貸方科目</th>
-                                        <th className="px-4 py-3 text-right font-medium">金額</th>
+                                        <th className="px-4 py-3 text-left font-medium">仕訳明細</th>
+                                        <th className="px-4 py-3 text-right font-medium">合計</th>
                                         <th className="px-4 py-3 text-right font-medium">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {entries.map((entry) => (
-                                        <tr key={entry.id} className="border-b last:border-0">
+                                        <tr key={entry.id} className="border-b align-top last:border-0">
                                             <td className="px-4 py-3 whitespace-nowrap">{formatDate(entry.entry_date)}</td>
                                             <td className="px-4 py-3">{entry.description}</td>
-                                            <td className="px-4 py-3">{entry.debit_account_name}</td>
-                                            <td className="px-4 py-3">{entry.credit_account_name}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="space-y-2">
+                                                    {entry.lines.map((line, lineIndex) => (
+                                                        <div key={`${entry.id}-${lineIndex}`} className="grid gap-1">
+                                                            {line.debit > 0 && (
+                                                                <span>
+                                                                    借 {line.account_name} {formatAmount(line.debit)}
+                                                                    <span className="text-muted-foreground ml-2 text-xs">
+                                                                        {taxCategoryLabel(
+                                                                            line.consumption_tax_category,
+                                                                            transferTaxCategories,
+                                                                        )}
+                                                                    </span>
+                                                                </span>
+                                                            )}
+                                                            {line.credit > 0 && (
+                                                                <span>
+                                                                    貸 {line.account_name} {formatAmount(line.credit)}
+                                                                    <span className="text-muted-foreground ml-2 text-xs">
+                                                                        {taxCategoryLabel(
+                                                                            line.consumption_tax_category,
+                                                                            transferTaxCategories,
+                                                                        )}
+                                                                    </span>
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3 text-right whitespace-nowrap">{formatAmount(entry.amount)}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <Dialog>

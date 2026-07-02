@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ConsumptionTaxCategory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,6 +13,7 @@ class JournalLine extends Model
         'account_id',
         'debit',
         'credit',
+        'consumption_tax_category',
     ];
 
     protected function casts(): array
@@ -19,6 +21,7 @@ class JournalLine extends Model
         return [
             'debit' => 'integer',
             'credit' => 'integer',
+            'consumption_tax_category' => ConsumptionTaxCategory::class,
         ];
     }
 

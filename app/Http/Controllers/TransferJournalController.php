@@ -7,7 +7,6 @@ use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Http\Requests\StoreTransferJournalRequest;
 use App\Models\Account;
-use App\Models\Company;
 use App\Models\JournalEntry;
 use App\Services\JournalService;
 use Carbon\Carbon;
@@ -43,9 +42,13 @@ class TransferJournalController extends Controller
                     'entry_date' => $entry->entry_date->format('Y-m-d'),
                     'description' => $entry->description,
                     'amount' => $entry->lines->sum('debit'),
-                    'debit_account_name' => $entry->lines->first(fn ($line) => $line->debit > 0)?->account?->name ?? '',
-                    'credit_account_name' => $entry->lines->first(fn ($line) => $line->credit > 0)?->account?->name ?? '',
-                    'consumption_tax_category' => $entry->consumption_tax_category?->value,
+                    'lines' => $entry->lines->map(fn ($line) => [
+                        'account_name' => $line->account?->name ?? '',
+                        'debit' => $line->debit,
+                        'credit' => $line->credit,
+                        'consumption_tax_category' => $line->consumption_tax_category?->value
+                            ?? $entry->consumption_tax_category?->value,
+                    ])->values()->all(),
                 ]);
         }
 
@@ -62,20 +65,24 @@ class TransferJournalController extends Controller
     {
         $company = $this->resolveCompany($request);
         $validated = $request->validated();
-        $amount = (int) $validated['debit_amount'];
-        $baseCategory = ConsumptionTaxCategory::from($validated['consumption_tax_category']);
+
+        $lines = array_map(function (array $line): array {
+            return [
+                'account_id' => (int) $line['account_id'],
+                'debit' => (int) $line['debit'],
+                'credit' => (int) $line['credit'],
+                'consumption_tax_category' => ConsumptionTaxCategory::from($line['consumption_tax_category']),
+            ];
+        }, $validated['lines']);
 
         $this->journalService->createBalancedEntry(
             $company,
             Carbon::parse($validated['entry_date']),
             $validated['description'],
             JournalSource::Transfer,
-            [
-                ['account_id' => (int) $validated['debit_account_id'], 'debit' => $amount, 'credit' => 0],
-                ['account_id' => (int) $validated['credit_account_id'], 'debit' => 0, 'credit' => $amount],
-            ],
+            $lines,
             null,
-            $baseCategory,
+            null,
             null,
         );
 

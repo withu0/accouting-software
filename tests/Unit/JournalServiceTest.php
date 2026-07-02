@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Exceptions\UnbalancedJournalException;
 use App\Models\Account;
@@ -158,6 +159,41 @@ class JournalServiceTest extends TestCase
         $this->journalService->validateLines([
             ['account_id' => 1, 'debit' => 1000, 'credit' => 1000],
             ['account_id' => 2, 'debit' => 0, 'credit' => 0],
+        ]);
+    }
+
+    public function test_balanced_entry_persists_line_level_tax_category(): void
+    {
+        $entry = $this->journalService->createBalancedEntry(
+            $this->company,
+            Carbon::parse('2025-05-01'),
+            '振替仕訳',
+            JournalSource::Transfer,
+            [
+                [
+                    'account_id' => $this->depositAccount->id,
+                    'debit' => 10000,
+                    'credit' => 0,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+                ],
+                [
+                    'account_id' => $this->revenueAccount->id,
+                    'debit' => 0,
+                    'credit' => 10000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::NonTaxable,
+                ],
+            ],
+        );
+
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $this->depositAccount->id,
+            'consumption_tax_category' => 'out_of_scope',
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $this->revenueAccount->id,
+            'consumption_tax_category' => 'non_taxable',
         ]);
     }
 }
