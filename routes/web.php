@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdvanceExpenseController;
 use App\Http\Controllers\BankImportController;
 use App\Http\Controllers\JournalController;
+use App\Http\Controllers\ReceiptScanController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransferJournalController;
 use Illuminate\Http\Request;
@@ -33,6 +34,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('advance-expenses', [AdvanceExpenseController::class, 'store'])->name('advance-expenses.store');
     Route::patch('advance-expenses/{journalEntry}', [AdvanceExpenseController::class, 'update'])->name('advance-expenses.update');
     Route::delete('advance-expenses/{journalEntry}', [AdvanceExpenseController::class, 'destroy'])->name('advance-expenses.destroy');
+
+    Route::post('receipt-scans', [ReceiptScanController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('receipt-scans.store');
 
     Route::get('reports', [ReportController::class, 'index'])->name('reports');
     Route::get('reports/{type}/export/{format}', [ReportController::class, 'export'])->name('reports.export');

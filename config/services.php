@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'receipt_model' => env('OPENAI_RECEIPT_MODEL', 'gpt-4o'),
+        'receipt_image_detail' => env('OPENAI_RECEIPT_IMAGE_DETAIL', 'high'),
+        'receipt_timeout' => env('OPENAI_RECEIPT_TIMEOUT', 60),
+        'http_verify' => filter_var(env('OPENAI_HTTP_VERIFY', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
 ];

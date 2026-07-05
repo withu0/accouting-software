@@ -2,13 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
+use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Requests\StoreAdvanceExpenseRequest;
 use App\Http\Requests\UpdateAdvanceExpenseRequest;
 use App\Models\Account;
-use App\Models\Company;
 use App\Models\JournalEntry;
 use App\Services\ConsumptionTaxService;
 use App\Services\JournalService;
@@ -70,6 +69,7 @@ class AdvanceExpenseController extends Controller
             'expenseAccounts' => $expenseAccounts,
             'purchaseTaxCategories' => ConsumptionTaxCategory::optionsForPurchases(),
             'hasActiveFiscalYear' => $activeFiscalYear !== null,
+            'receiptScanAvailable' => is_string(config('services.openai.key')) && config('services.openai.key') !== '',
         ]);
     }
 

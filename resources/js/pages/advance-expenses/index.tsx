@@ -1,5 +1,6 @@
 import ConsumptionTaxFields, { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import InputError from '@/components/input-error';
+import ReceiptScanUpload from '@/components/receipt-scan-upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +37,17 @@ interface Props {
     expenseAccounts: ExpenseAccount[];
     purchaseTaxCategories: TaxCategoryOption[];
     hasActiveFiscalYear: boolean;
+    receiptScanAvailable: boolean;
+}
+
+interface ReceiptScanResult {
+    entry_date: string | null;
+    amount: number | null;
+    merchant_name: string | null;
+    confidence: {
+        date: number | null;
+        amount: number | null;
+    };
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -221,8 +233,17 @@ export default function AdvanceExpensesIndex({
     expenseAccounts,
     purchaseTaxCategories,
     hasActiveFiscalYear,
+    receiptScanAvailable,
 }: Props) {
-    const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
+    const { flash, errors: pageErrors } = usePage<
+        SharedData & {
+            flash?: {
+                success?: string;
+                receiptScan?: ReceiptScanResult;
+            };
+            errors?: Record<string, string>;
+        }
+    >().props;
 
     const { data, setData, post, processing, errors, reset } = useForm({
         entry_date: '',
@@ -233,11 +254,45 @@ export default function AdvanceExpensesIndex({
         has_qualified_invoice: true,
     });
 
+    const [scanNotice, setScanNotice] = useState<string | null>(null);
+
+    useEffect(() => {
+        const scan = flash?.receiptScan;
+        if (!scan) {
+            return;
+        }
+
+        if (scan.entry_date) {
+            setData('entry_date', scan.entry_date);
+        }
+        if (scan.amount != null) {
+            setData('amount', String(scan.amount));
+        }
+        if (scan.merchant_name) {
+            setData('description', scan.merchant_name);
+        }
+
+        const lowConfidence =
+            (scan.entry_date != null && scan.confidence.date != null && scan.confidence.date < 0.7) ||
+            (scan.amount != null && scan.confidence.amount != null && scan.confidence.amount < 0.7);
+
+        if (scan.entry_date == null || scan.amount == null) {
+            setScanNotice('一部の項目を読み取れませんでした。内容を確認してから登録してください。');
+        } else if (lowConfidence) {
+            setScanNotice('読み取り結果の信頼度が低い可能性があります。内容を確認してください。');
+        } else {
+            setScanNotice('領収書から読み取った内容をフォームに反映しました。内容を確認してから登録してください。');
+        }
+    }, [flash?.receiptScan, setData]);
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         post(route('advance-expenses.store'), {
             preserveScroll: true,
-            onSuccess: () => reset(),
+            onSuccess: () => {
+                reset();
+                setScanNotice(null);
+            },
         });
     };
 
@@ -276,10 +331,25 @@ export default function AdvanceExpensesIndex({
                             <Wallet className="size-5" />
                             立替経費を登録
                         </CardTitle>
-                        <CardDescription>日付・金額・摘要・経費科目を入力してください</CardDescription>
+                        <CardDescription>
+                            領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額を自動入力できます。経費科目などは手入力してください。
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={submit} className="space-y-4">
+                            <ReceiptScanUpload
+                                available={receiptScanAvailable}
+                                disabled={!hasActiveFiscalYear || processing}
+                                error={pageErrors?.receipt}
+                            />
+
+                            {scanNotice && (
+                                <Alert>
+                                    <AlertCircle className="size-4" />
+                                    <AlertDescription>{scanNotice}</AlertDescription>
+                                </Alert>
+                            )}
+
                             <div className="grid gap-2">
                                 <Label htmlFor="entry_date">日付</Label>
                                 <Input
