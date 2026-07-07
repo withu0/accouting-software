@@ -5,8 +5,10 @@ namespace App\Services;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 class ReceiptOcrService
 {
@@ -25,8 +27,18 @@ class ReceiptOcrService
             throw new InvalidArgumentException('OpenAI APIキーが設定されていません。');
         }
 
-        $mimeType = $file->getMimeType() ?? 'application/octet-stream';
-        $base64 = base64_encode((string) file_get_contents($file->getRealPath()));
+        $path = $file->getRealPath();
+        if ($path === false || ! is_readable($path)) {
+            throw new RuntimeException('アップロードされた画像を読み込めませんでした。');
+        }
+
+        $contents = file_get_contents($path);
+        if ($contents === false) {
+            throw new RuntimeException('アップロードされた画像を読み込めませんでした。');
+        }
+
+        $mimeType = $this->resolveMimeType($file);
+        $base64 = base64_encode($contents);
         $model = config('services.openai.receipt_model', 'gpt-4o');
         $detail = config('services.openai.receipt_image_detail', 'high');
 
@@ -102,11 +114,14 @@ class ReceiptOcrService
                 ],
             ]);
         } catch (ConnectionException $exception) {
-            $message = str_contains($exception->getMessage(), 'SSL certificate')
-                ? 'OpenAI APIへの接続に失敗しました。SSL証明書の設定を確認するか、ローカル開発では .env に OPENAI_HTTP_VERIFY=false を設定してください。'
-                : 'OpenAI APIへの接続に失敗しました。ネットワーク設定を確認してください。';
+            throw new RuntimeException($this->connectionErrorMessage($exception), previous: $exception);
+        } catch (Throwable $exception) {
+            Log::error('Receipt OCR request failed', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
 
-            throw new RuntimeException($message, previous: $exception);
+            throw new RuntimeException('OpenAI APIへの接続中にエラーが発生しました。', previous: $exception);
         }
 
         if (! $response->successful()) {
@@ -136,6 +151,37 @@ class ReceiptOcrService
             ->withOptions([
                 'verify' => config('services.openai.http_verify', true),
             ]);
+    }
+
+    private function resolveMimeType(UploadedFile $file): string
+    {
+        $mimeType = $file->getMimeType() ?? 'application/octet-stream';
+
+        if (in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            return $mimeType;
+        }
+
+        return match (strtolower($file->getClientOriginalExtension())) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            default => 'image/jpeg',
+        };
+    }
+
+    private function connectionErrorMessage(ConnectionException $exception): string
+    {
+        $detail = $exception->getMessage();
+
+        if (str_contains($detail, 'SSL certificate') || str_contains($detail, 'certificate verify failed')) {
+            return 'OpenAI APIへの接続に失敗しました（SSL証明書）。サーバーの .env に OPENAI_HTTP_VERIFY=false を設定するか、PHP の CA 証明書を設定してください。';
+        }
+
+        if (str_contains($detail, 'timed out') || str_contains($detail, 'Timeout')) {
+            return 'OpenAI APIへの接続がタイムアウトしました。時間をおいて再度お試しください。';
+        }
+
+        return 'OpenAI APIへの接続に失敗しました。ネットワーク設定を確認してください。';
     }
 
     /**

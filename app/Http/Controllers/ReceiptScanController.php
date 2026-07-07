@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Requests\StoreReceiptScanRequest;
 use App\Services\ReceiptOcrService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -38,10 +39,19 @@ class ReceiptScanController extends Controller
             return redirect()
                 ->route('advance-expenses')
                 ->withErrors(['receipt' => $exception->getMessage()]);
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            Log::error('Receipt scan failed', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $message = config('app.debug')
+                ? $exception->getMessage()
+                : '領収書の読み取り中にエラーが発生しました。';
+
             return redirect()
                 ->route('advance-expenses')
-                ->withErrors(['receipt' => '領収書の読み取り中にエラーが発生しました。']);
+                ->withErrors(['receipt' => $message]);
         }
 
         if ($result['entry_date'] === null && $result['amount'] === null) {
