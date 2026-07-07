@@ -45,74 +45,74 @@ class ReceiptOcrService
         try {
             $response = $this->httpClient()
                 ->post('https://api.openai.com/v1/chat/completions', [
-                'model' => $model,
-                'response_format' => [
-                    'type' => 'json_schema',
-                    'json_schema' => [
-                        'name' => 'receipt_scan',
-                        'strict' => true,
-                        'schema' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'entry_date' => [
-                                    'type' => ['string', 'null'],
-                                    'description' => 'Receipt date in YYYY-MM-DD format',
+                    'model' => $model,
+                    'response_format' => [
+                        'type' => 'json_schema',
+                        'json_schema' => [
+                            'name' => 'receipt_scan',
+                            'strict' => true,
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'entry_date' => [
+                                        'type' => ['string', 'null'],
+                                        'description' => 'Receipt date in YYYY-MM-DD format',
+                                    ],
+                                    'amount' => [
+                                        'type' => ['integer', 'null'],
+                                        'description' => 'Tax-included total amount in JPY',
+                                    ],
+                                    'merchant_name' => [
+                                        'type' => ['string', 'null'],
+                                        'description' => 'Store or merchant name',
+                                    ],
+                                    'confidence_date' => [
+                                        'type' => ['number', 'null'],
+                                        'description' => 'Confidence for entry_date from 0 to 1',
+                                    ],
+                                    'confidence_amount' => [
+                                        'type' => ['number', 'null'],
+                                        'description' => 'Confidence for amount from 0 to 1',
+                                    ],
                                 ],
-                                'amount' => [
-                                    'type' => ['integer', 'null'],
-                                    'description' => 'Tax-included total amount in JPY',
+                                'required' => [
+                                    'entry_date',
+                                    'amount',
+                                    'merchant_name',
+                                    'confidence_date',
+                                    'confidence_amount',
                                 ],
-                                'merchant_name' => [
-                                    'type' => ['string', 'null'],
-                                    'description' => 'Store or merchant name',
-                                ],
-                                'confidence_date' => [
-                                    'type' => ['number', 'null'],
-                                    'description' => 'Confidence for entry_date from 0 to 1',
-                                ],
-                                'confidence_amount' => [
-                                    'type' => ['number', 'null'],
-                                    'description' => 'Confidence for amount from 0 to 1',
-                                ],
-                            ],
-                            'required' => [
-                                'entry_date',
-                                'amount',
-                                'merchant_name',
-                                'confidence_date',
-                                'confidence_amount',
-                            ],
-                            'additionalProperties' => false,
-                        ],
-                    ],
-                ],
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => implode("\n", [
-                            'You extract fields from Japanese receipts (領収書, レシート).',
-                            'Return entry_date as YYYY-MM-DD when clearly readable, otherwise null.',
-                            'Return amount as the tax-included total (合計, 総計, お支払い, ご利用金額). Integer yen only.',
-                            'Ignore subtotals (小計) when a grand total exists.',
-                            'Return merchant_name when visible, otherwise null.',
-                            'If unsure about date or amount, return null for that field rather than guessing.',
-                        ]),
-                    ],
-                    [
-                        'role' => 'user',
-                        'content' => [
-                            ['type' => 'text', 'text' => 'Extract the receipt date, tax-included total amount, and merchant name.'],
-                            [
-                                'type' => 'image_url',
-                                'image_url' => [
-                                    'url' => "data:{$mimeType};base64,{$base64}",
-                                    'detail' => $detail,
-                                ],
+                                'additionalProperties' => false,
                             ],
                         ],
                     ],
-                ],
-            ]);
+                    'messages' => [
+                        [
+                            'role' => 'system',
+                            'content' => implode("\n", [
+                                'You extract fields from Japanese receipts (領収書, レシート).',
+                                'Return entry_date as YYYY-MM-DD when clearly readable, otherwise null.',
+                                'Return amount as the tax-included total (合計, 総計, お支払い, ご利用金額). Integer yen only.',
+                                'Ignore subtotals (小計) when a grand total exists.',
+                                'Return merchant_name when visible, otherwise null.',
+                                'If unsure about date or amount, return null for that field rather than guessing.',
+                            ]),
+                        ],
+                        [
+                            'role' => 'user',
+                            'content' => [
+                                ['type' => 'text', 'text' => 'Extract the receipt date, tax-included total amount, and merchant name.'],
+                                [
+                                    'type' => 'image_url',
+                                    'image_url' => [
+                                        'url' => "data:{$mimeType};base64,{$base64}",
+                                        'detail' => $detail,
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ]);
         } catch (ConnectionException $exception) {
             throw new RuntimeException($this->connectionErrorMessage($exception), previous: $exception);
         } catch (Throwable $exception) {
@@ -121,7 +121,7 @@ class ReceiptOcrService
                 'message' => $exception->getMessage(),
             ]);
 
-            throw new RuntimeException('OpenAI APIへの接続中にエラーが発生しました。', previous: $exception);
+            throw new RuntimeException($this->requestFailureMessage($exception), previous: $exception);
         }
 
         if (! $response->successful()) {
@@ -146,11 +146,15 @@ class ReceiptOcrService
 
     private function httpClient()
     {
-        return Http::withToken((string) config('services.openai.key'))
+        $client = Http::withToken((string) config('services.openai.key'))
             ->timeout((int) config('services.openai.receipt_timeout', 60))
-            ->withOptions([
-                'verify' => config('services.openai.http_verify', true),
-            ]);
+            ->connectTimeout(15);
+
+        if (! config('services.openai.http_verify', true)) {
+            return $client->withoutVerifying();
+        }
+
+        return $client;
     }
 
     private function resolveMimeType(UploadedFile $file): string
@@ -182,6 +186,37 @@ class ReceiptOcrService
         }
 
         return 'OpenAI APIへの接続に失敗しました。ネットワーク設定を確認してください。';
+    }
+
+    private function requestFailureMessage(Throwable $exception): string
+    {
+        if (config('app.debug')) {
+            return sprintf('OpenAI APIエラー (%s): %s', class_basename($exception), $exception->getMessage());
+        }
+
+        $detail = $exception->getMessage();
+
+        if (str_contains($detail, 'curl extension') || str_contains($detail, 'cURL extension')) {
+            return 'サーバーで PHP の cURL 拡張が有効になっていません。ホスティング提供者にご確認ください。';
+        }
+
+        if (str_contains($detail, 'SSL certificate') || str_contains($detail, 'certificate verify failed')) {
+            return 'OpenAI APIへの接続に失敗しました（SSL証明書）。.env の OPENAI_HTTP_VERIFY=false を設定し、php artisan config:clear を実行してください。';
+        }
+
+        if (str_contains($detail, 'Could not resolve host') || str_contains($detail, 'cURL error 6')) {
+            return 'OpenAI APIのホスト名を解決できません。サーバーから api.openai.com への外部接続が許可されているかホスティング提供者にご確認ください。';
+        }
+
+        if (str_contains($detail, 'Failed to connect') || str_contains($detail, 'cURL error 7')) {
+            return 'OpenAI APIへの接続が拒否されました。サーバーから api.openai.com への外部 HTTPS 接続が許可されているかホスティング提供者にご確認ください。';
+        }
+
+        if (str_contains($detail, 'timed out') || str_contains($detail, 'cURL error 28')) {
+            return 'OpenAI APIへの接続がタイムアウトしました。時間をおいて再度お試しください。';
+        }
+
+        return 'OpenAI APIへの接続中にエラーが発生しました。';
     }
 
     /**
