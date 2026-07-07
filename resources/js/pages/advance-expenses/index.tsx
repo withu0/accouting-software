@@ -53,9 +53,11 @@ interface ReceiptScanResult {
     entry_date: string | null;
     amount: number | null;
     merchant_name: string | null;
+    consumption_tax_category: string | null;
     confidence: {
         date: number | null;
         amount: number | null;
+        consumption_tax_category: number | null;
     };
 }
 
@@ -280,10 +282,16 @@ export default function AdvanceExpensesIndex({
         if (scan.merchant_name) {
             setData('description', scan.merchant_name);
         }
+        if (scan.consumption_tax_category) {
+            setData('consumption_tax_category', scan.consumption_tax_category);
+        }
 
         const lowConfidence =
             (scan.entry_date != null && scan.confidence.date != null && scan.confidence.date < 0.7) ||
-            (scan.amount != null && scan.confidence.amount != null && scan.confidence.amount < 0.7);
+            (scan.amount != null && scan.confidence.amount != null && scan.confidence.amount < 0.7) ||
+            (scan.consumption_tax_category != null &&
+                scan.confidence.consumption_tax_category != null &&
+                scan.confidence.consumption_tax_category < 0.7);
 
         if (scan.entry_date == null || scan.amount == null) {
             setScanNotice('一部の項目を読み取れませんでした。内容を確認してから登録してください。');
@@ -341,7 +349,7 @@ export default function AdvanceExpensesIndex({
                     left={
                         <FormSection
                             title="立替経費を登録"
-                            description="領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額を自動入力できます。経費科目などは手入力してください。"
+                            description="領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額・税区分を自動入力できます。経費科目などは手入力してください。"
                         >
                             <form onSubmit={submit} className="space-y-4">
                                 <ReceiptScanUpload

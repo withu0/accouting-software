@@ -82,8 +82,10 @@ class ReceiptScanTest extends TestCase
                                 'entry_date' => '2025-05-15',
                                 'amount' => 1080,
                                 'merchant_name' => 'セブン-イレブン',
+                                'consumption_tax_category' => 'taxable_purchase_8_reduced',
                                 'confidence_date' => 0.95,
                                 'confidence_amount' => 0.9,
+                                'confidence_consumption_tax_category' => 0.92,
                             ], JSON_THROW_ON_ERROR),
                         ],
                     ],
@@ -99,7 +101,8 @@ class ReceiptScanTest extends TestCase
             ->assertRedirect(route('advance-expenses'))
             ->assertSessionHas('receiptScan', fn (array $scan) => $scan['entry_date'] === '2025-05-15'
                 && $scan['amount'] === 1080
-                && $scan['merchant_name'] === 'セブン-イレブン');
+                && $scan['merchant_name'] === 'セブン-イレブン'
+                && $scan['consumption_tax_category'] === 'taxable_purchase_8_reduced');
     }
 
     public function test_scan_rejects_when_both_fields_missing(): void
@@ -113,8 +116,10 @@ class ReceiptScanTest extends TestCase
                                 'entry_date' => null,
                                 'amount' => null,
                                 'merchant_name' => null,
+                                'consumption_tax_category' => null,
                                 'confidence_date' => null,
                                 'confidence_amount' => null,
+                                'confidence_consumption_tax_category' => null,
                             ], JSON_THROW_ON_ERROR),
                         ],
                     ],

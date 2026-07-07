@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ConsumptionTaxCategory;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -13,11 +14,20 @@ use Throwable;
 class ReceiptOcrService
 {
     /**
+     * @return list<string>
+     */
+    private function purchaseTaxCategoryValues(): array
+    {
+        return array_column(ConsumptionTaxCategory::optionsForPurchases(), 'value');
+    }
+
+    /**
      * @return array{
      *     entry_date: string|null,
      *     amount: int|null,
      *     merchant_name: string|null,
-     *     confidence: array{date: float|null, amount: float|null}
+     *     consumption_tax_category: string|null,
+     *     confidence: array{date: float|null, amount: float|null, consumption_tax_category: float|null}
      * }
      */
     public function extract(UploadedFile $file): array
@@ -66,6 +76,11 @@ class ReceiptOcrService
                                         'type' => ['string', 'null'],
                                         'description' => 'Store or merchant name',
                                     ],
+                                    'consumption_tax_category' => [
+                                        'type' => ['string', 'null'],
+                                        'enum' => array_merge($this->purchaseTaxCategoryValues(), [null]),
+                                        'description' => 'Purchase tax category inferred from receipt tax rate labels',
+                                    ],
                                     'confidence_date' => [
                                         'type' => ['number', 'null'],
                                         'description' => 'Confidence for entry_date from 0 to 1',
@@ -74,13 +89,19 @@ class ReceiptOcrService
                                         'type' => ['number', 'null'],
                                         'description' => 'Confidence for amount from 0 to 1',
                                     ],
+                                    'confidence_consumption_tax_category' => [
+                                        'type' => ['number', 'null'],
+                                        'description' => 'Confidence for consumption_tax_category from 0 to 1',
+                                    ],
                                 ],
                                 'required' => [
                                     'entry_date',
                                     'amount',
                                     'merchant_name',
+                                    'consumption_tax_category',
                                     'confidence_date',
                                     'confidence_amount',
+                                    'confidence_consumption_tax_category',
                                 ],
                                 'additionalProperties' => false,
                             ],
@@ -95,13 +116,18 @@ class ReceiptOcrService
                                 'Return amount as the tax-included total (合計, 総計, お支払い, ご利用金額). Integer yen only.',
                                 'Ignore subtotals (小計) when a grand total exists.',
                                 'Return merchant_name when visible, otherwise null.',
-                                'If unsure about date or amount, return null for that field rather than guessing.',
+                                'Return consumption_tax_category from receipt tax rate labels:',
+                                '- taxable_purchase_10 for 10%, 標準税率, 内税10%, or standard rate purchases.',
+                                '- taxable_purchase_8_reduced for 8%, 軽減税率, (軽), or reduced rate purchases.',
+                                '- non_taxable for 非課税.',
+                                '- out_of_scope for 対象外 or when no tax rate is shown.',
+                                'If unsure about date, amount, or tax category, return null for that field rather than guessing.',
                             ]),
                         ],
                         [
                             'role' => 'user',
                             'content' => [
-                                ['type' => 'text', 'text' => 'Extract the receipt date, tax-included total amount, and merchant name.'],
+                                ['type' => 'text', 'text' => 'Extract the receipt date, tax-included total amount, merchant name, and purchase tax category from tax rate labels.'],
                                 [
                                     'type' => 'image_url',
                                     'image_url' => [
@@ -225,7 +251,8 @@ class ReceiptOcrService
      *     entry_date: string|null,
      *     amount: int|null,
      *     merchant_name: string|null,
-     *     confidence: array{date: float|null, amount: float|null}
+     *     consumption_tax_category: string|null,
+     *     confidence: array{date: float|null, amount: float|null, consumption_tax_category: float|null}
      * }
      */
     private function normalizeResult(array $parsed): array
@@ -233,6 +260,7 @@ class ReceiptOcrService
         $entryDate = $parsed['entry_date'] ?? null;
         $amount = $parsed['amount'] ?? null;
         $merchantName = $parsed['merchant_name'] ?? null;
+        $taxCategory = $parsed['consumption_tax_category'] ?? null;
 
         $normalizedDate = is_string($entryDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $entryDate) === 1
             ? $entryDate
@@ -246,13 +274,19 @@ class ReceiptOcrService
             ? trim($merchantName)
             : null;
 
+        $normalizedTaxCategory = is_string($taxCategory) && in_array($taxCategory, $this->purchaseTaxCategoryValues(), true)
+            ? $taxCategory
+            : null;
+
         return [
             'entry_date' => $normalizedDate,
             'amount' => $normalizedAmount,
             'merchant_name' => $normalizedMerchant,
+            'consumption_tax_category' => $normalizedTaxCategory,
             'confidence' => [
                 'date' => $this->normalizeConfidence($parsed['confidence_date'] ?? null),
                 'amount' => $this->normalizeConfidence($parsed['confidence_amount'] ?? null),
+                'consumption_tax_category' => $this->normalizeConfidence($parsed['confidence_consumption_tax_category'] ?? null),
             ],
         ];
     }

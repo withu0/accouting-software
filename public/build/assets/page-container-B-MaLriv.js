@@ -1,1 +1,0 @@
-import{j as l}from"./app-C2OaUq25.js";import{c as o}from"./app-logo-icon-oc9kN2Am.js";const s={default:"max-w-6xl",narrow:"max-w-3xl",full:"max-w-none"};function n({children:a,className:x,size:e="default"}){return l.jsx("div",{className:o("mx-auto flex w-full flex-1 flex-col gap-8 px-4 py-6 md:px-8 md:py-8",s[e],x),children:a})}export{n as P};
