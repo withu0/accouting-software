@@ -347,8 +347,8 @@ export default function ReceiptScanUpload({ disabled = false, available, error }
             </div>
 
             <Dialog open={step === 'crop'} onOpenChange={handleCropDialogOpenChange}>
-                <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col gap-4 overflow-hidden">
-                    <DialogHeader>
+                <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-3xl flex-col gap-3 overflow-hidden sm:gap-4">
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>領収書部分を切り取る</DialogTitle>
                         <DialogDescription asChild>
                             <div className="space-y-2 text-sm text-muted-foreground">
@@ -363,9 +363,10 @@ export default function ReceiptScanUpload({ disabled = false, available, error }
                     </DialogHeader>
 
                     {imageSrc && (
-                        <div className="max-h-[60vh] overflow-auto rounded-md bg-muted p-2">
+                        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-md bg-muted p-2">
                             <ReactCrop
                                 crop={crop}
+                                className="max-h-full max-w-full"
                                 onChange={(_pixelCrop, percentCrop) => setCrop(percentCrop)}
                                 onComplete={(pixelCrop) => setCompletedCrop(pixelCrop)}
                             >
@@ -373,14 +374,15 @@ export default function ReceiptScanUpload({ disabled = false, available, error }
                                     ref={imageRef}
                                     src={imageSrc}
                                     alt="領収書"
-                                    className="mx-auto max-h-[55vh] w-full object-contain"
+                                    className="block max-w-full object-contain"
+                                    style={{ maxHeight: 'calc(90vh - 19rem)' }}
                                     onLoad={handleImageLoad}
                                 />
                             </ReactCrop>
                         </div>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <Button
                             type="button"
                             variant="outline"
@@ -403,7 +405,7 @@ export default function ReceiptScanUpload({ disabled = false, available, error }
                         </Button>
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0">
                         <Button type="button" variant="outline" disabled={preparingCrop || rotating} onClick={reset}>
                             キャンセル
                         </Button>

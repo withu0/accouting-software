@@ -1,15 +1,24 @@
-import ConsumptionTaxFields, { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { DataTable, DataTableHeader } from '@/components/data-table';
+import { FlashAlert } from '@/components/flash-alert';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
+import { FilterToolbar } from '@/components/filter-toolbar';
+import { StickyActionBar } from '@/components/sticky-action-bar';
+import { SummaryStrip } from '@/components/summary-strip';
+import { WorkflowSteps, bankImportSteps } from '@/components/workflow-steps';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import BankImportRowEditDialog from '@/components/bank-import-row-edit-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
-import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, router, usePage } from '@inertiajs/react';
-import { CheckCircle2, Pencil } from 'lucide-react';
+import { type BreadcrumbItem } from '@/types';
+import { Head, router } from '@inertiajs/react';
+import { Pencil } from 'lucide-react';
 import { FormEventHandler, useMemo, useState } from 'react';
 
 interface ExpenseAccount {
@@ -100,7 +109,6 @@ export default function BankImportReview({
     hasActiveFiscalYear,
     importSummary,
 }: Props) {
-    const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(rows.map((r) => r.id)));
     const [accountSelections, setAccountSelections] = useState<Record<number, string>>(() => initialAccountSelections(rows));
     const [taxCategories, setTaxCategories] = useState<Record<number, string>>(() => initialTaxCategories(rows));
@@ -171,39 +179,53 @@ export default function BankImportReview({
         });
     };
 
+    const [rowFilter, setRowFilter] = useState<'all' | 'deposit' | 'withdrawal' | 'missing'>('all');
+
+    const filteredRows = useMemo(() => {
+        return rows.filter((row) => {
+            if (rowFilter === 'deposit') return row.is_deposit;
+            if (rowFilter === 'withdrawal') return !row.is_deposit;
+            if (rowFilter === 'missing') return missingAccountRowIds.has(row.id);
+            return true;
+        });
+    }, [rows, rowFilter, missingAccountRowIds]);
+
     const allSelected = rows.length > 0 && selectedIds.size === rows.length;
+
+    const selectedTotal = useMemo(() => {
+        return rows
+            .filter((row) => selectedIds.has(row.id))
+            .reduce((sum, row) => sum + (row.is_deposit ? row.deposit_amount : row.withdrawal_amount), 0);
+    }, [rows, selectedIds]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="取引確認" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">取引確認</h1>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                        {bankImport.original_filename} — 記帳内容を確認してください
-                    </p>
-                </div>
+            <PageContainer size="full">
+                <PageHeader
+                    title="取引確認"
+                    description={`${bankImport.original_filename} — 記帳内容を確認してください`}
+                />
 
-                {flash?.success && (
-                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-                        <CheckCircle2 className="size-4" />
-                        <AlertDescription>{flash.success}</AlertDescription>
-                    </Alert>
-                )}
+                <FlashAlert />
 
-                {importSummary && (
-                    <div className="bg-muted/50 rounded-lg border px-4 py-3 text-sm">
-                        {importSummary.detected_format && (
-                            <p className="mb-1 font-medium">判別形式: {importSummary.detected_format}</p>
-                        )}
-                        <span>
-                            {importSummary.total}件中 {importSummary.new}件を取込
-                            {importSummary.duplicates > 0 && `（${importSummary.duplicates}件は重複のためスキップ）`}
-                            {(importSummary.out_of_period ?? 0) > 0 &&
-                                `（${importSummary.out_of_period}件は会計期間外のためスキップ）`}
-                        </span>
-                    </div>
-                )}
+                <WorkflowSteps steps={bankImportSteps} currentStep="review" />
+
+                <SummaryStrip
+                    items={[
+                        { label: '全件', value: `${rows.length}件` },
+                        { label: '選択', value: `${selectedIds.size}件`, highlight: true },
+                        { label: '選択合計', value: formatAmount(selectedTotal) },
+                        {
+                            label: '科目未選択',
+                            value: `${missingAccountRowIds.size}件`,
+                            variant: missingAccountRowIds.size > 0 ? 'warning' : 'default',
+                        },
+                        ...(importSummary?.detected_format
+                            ? [{ label: '判別形式', value: importSummary.detected_format }]
+                            : []),
+                    ]}
+                />
 
                 {rows.length === 0 ? (
                     <div className="text-muted-foreground py-12 text-center text-sm">確認待ちの取引はありません</div>
@@ -221,153 +243,175 @@ export default function BankImportReview({
                             </Alert>
                         )}
 
-                        <div className="overflow-x-auto rounded-lg border">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="bg-muted/50 border-b">
-                                        <th className="px-4 py-3 text-left">
-                                            <Checkbox checked={allSelected} onCheckedChange={(c) => toggleAll(c === true)} />
-                                        </th>
-                                        <th className="px-4 py-3 text-left font-medium">日付</th>
-                                        <th className="px-4 py-3 text-left font-medium">摘要</th>
-                                        <th className="px-4 py-3 text-right font-medium">金額</th>
-                                        <th className="px-4 py-3 text-left font-medium">記帳方法</th>
-                                        <th className="px-4 py-3 text-left font-medium">税区分</th>
-                                        <th className="px-4 py-3 text-right font-medium">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows.map((row) => {
-                                        const amount = row.is_deposit ? row.deposit_amount : row.withdrawal_amount;
-                                        const categoryOptions = row.is_deposit ? salesTaxCategories : purchaseTaxCategories;
+                        <FilterToolbar sticky={false}>
+                            {(
+                                [
+                                    ['all', 'すべて'],
+                                    ['deposit', '入金のみ'],
+                                    ['withdrawal', '出金のみ'],
+                                    ['missing', '科目未選択'],
+                                ] as const
+                            ).map(([key, label]) => (
+                                <Button
+                                    key={key}
+                                    type="button"
+                                    size="sm"
+                                    variant={rowFilter === key ? 'default' : 'outline'}
+                                    onClick={() => setRowFilter(key)}
+                                >
+                                    {label}
+                                </Button>
+                            ))}
+                        </FilterToolbar>
 
-                                        return (
-                                            <tr
-                                                key={row.id}
-                                                className={`border-b last:border-0 ${missingAccountRowIds.has(row.id) ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
-                                            >
-                                                <td className="px-4 py-3">
-                                                    <Checkbox
-                                                        checked={selectedIds.has(row.id)}
-                                                        onCheckedChange={(c) => toggleRow(row.id, c === true)}
-                                                    />
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.transaction_date)}</td>
-                                                <td className="px-4 py-3">{row.description}</td>
-                                                <td className="px-4 py-3 text-right whitespace-nowrap">
-                                                    <span className={row.is_deposit ? 'text-green-700 dark:text-green-400' : ''}>
-                                                        {row.is_deposit ? '+' : '-'}
-                                                        {formatAmount(amount)}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {row.is_deposit ? (
-                                                        <Badge variant="secondary">売上として記帳</Badge>
-                                                    ) : (
-                                                        <div className="flex flex-col gap-1">
-                                                            <Select
-                                                                value={accountSelections[row.id] ?? ''}
-                                                                onValueChange={(v) => handleAccountChange(row.id, v)}
-                                                            >
-                                                                <SelectTrigger
-                                                                    className={`w-48 ${missingAccountRowIds.has(row.id) ? 'border-red-500' : ''}`}
-                                                                >
-                                                                    <SelectValue placeholder="経費科目を選択（必須）" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {expenseAccounts.map((account) => (
-                                                                        <SelectItem key={account.id} value={String(account.id)}>
-                                                                            {account.name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            {row.suggested_account_id &&
-                                                                accountSelections[row.id] === String(row.suggested_account_id) && (
-                                                                    <span className="text-muted-foreground text-xs">自動提案</span>
-                                                                )}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="min-w-56 space-y-2">
+                        <DataTable>
+                            <DataTableHeader>
+                                <TableRow>
+                                    <TableHead className="w-10">
+                                        <Checkbox checked={allSelected} onCheckedChange={(c) => toggleAll(c === true)} />
+                                    </TableHead>
+                                    <TableHead>日付</TableHead>
+                                    <TableHead>摘要</TableHead>
+                                    <TableHead className="text-right">金額</TableHead>
+                                    <TableHead>記帳方法</TableHead>
+                                    <TableHead>税区分</TableHead>
+                                    <TableHead className="text-right">操作</TableHead>
+                                </TableRow>
+                            </DataTableHeader>
+                            <TableBody>
+                                {filteredRows.map((row) => {
+                                    const amount = row.is_deposit ? row.deposit_amount : row.withdrawal_amount;
+                                    const categoryOptions = row.is_deposit ? salesTaxCategories : purchaseTaxCategories;
+
+                                    return (
+                                        <TableRow
+                                            key={row.id}
+                                            className={missingAccountRowIds.has(row.id) ? 'bg-red-50 dark:bg-red-950/20' : ''}
+                                        >
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedIds.has(row.id)}
+                                                    onCheckedChange={(c) => toggleRow(row.id, c === true)}
+                                                />
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap">{formatDate(row.transaction_date)}</TableCell>
+                                            <TableCell>{row.description}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                                <span className={row.is_deposit ? 'text-green-700 dark:text-green-400' : ''}>
+                                                    {row.is_deposit ? '+' : '-'}
+                                                    {formatAmount(amount)}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.is_deposit ? (
+                                                    <Badge variant="secondary">売上として記帳</Badge>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1">
                                                         <Select
-                                                            value={taxCategories[row.id]}
-                                                            onValueChange={(v) =>
-                                                                setTaxCategories((prev) => ({ ...prev, [row.id]: v }))
-                                                            }
+                                                            value={accountSelections[row.id] ?? ''}
+                                                            onValueChange={(v) => handleAccountChange(row.id, v)}
                                                         >
-                                                            <SelectTrigger>
-                                                                <SelectValue />
+                                                            <SelectTrigger
+                                                                className={`w-48 ${missingAccountRowIds.has(row.id) ? 'border-red-500' : ''}`}
+                                                            >
+                                                                <SelectValue placeholder="経費科目を選択（必須）" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {categoryOptions.map((option) => (
-                                                                    <SelectItem key={option.value} value={option.value}>
-                                                                        {option.label}
+                                                                {expenseAccounts.map((account) => (
+                                                                    <SelectItem key={account.id} value={String(account.id)}>
+                                                                        {account.name}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {!row.is_deposit && (
-                                                            <label className="flex items-center gap-2 text-xs">
-                                                                <Checkbox
-                                                                    checked={qualifiedInvoices[row.id] ?? true}
-                                                                    onCheckedChange={(checked) =>
-                                                                        setQualifiedInvoices((prev) => ({
-                                                                            ...prev,
-                                                                            [row.id]: checked === true,
-                                                                        }))
-                                                                    }
-                                                                />
-                                                                適格請求書あり
-                                                            </label>
-                                                        )}
+                                                        {row.suggested_account_id &&
+                                                            accountSelections[row.id] === String(row.suggested_account_id) && (
+                                                                <span className="text-muted-foreground text-xs">自動提案</span>
+                                                            )}
                                                     </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <BankImportRowEditDialog
-                                                            rowId={row.id}
-                                                            isDeposit={row.is_deposit}
-                                                            initialValues={{
-                                                                transaction_date: row.transaction_date,
-                                                                description: row.description,
-                                                                amount: row.amount,
-                                                                account_id: row.account_id ?? null,
-                                                                consumption_tax_category: taxCategories[row.id],
-                                                                has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
-                                                            }}
-                                                            accountGroups={accountGroups}
-                                                            expenseAccounts={expenseAccounts}
-                                                            salesTaxCategories={salesTaxCategories}
-                                                            purchaseTaxCategories={purchaseTaxCategories}
-                                                            hasActiveFiscalYear={hasActiveFiscalYear}
-                                                            trigger={
-                                                                <Button type="button" variant="ghost" size="sm">
-                                                                    <Pencil className="size-4" />
-                                                                </Button>
-                                                            }
-                                                        />
-                                                        <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
-                                                            スキップ
-                                                        </Button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="min-w-56 space-y-2">
+                                                    <Select
+                                                        value={taxCategories[row.id]}
+                                                        onValueChange={(v) =>
+                                                            setTaxCategories((prev) => ({ ...prev, [row.id]: v }))
+                                                        }
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {categoryOptions.map((option) => (
+                                                                <SelectItem key={option.value} value={option.value}>
+                                                                    {option.label}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    {!row.is_deposit && (
+                                                        <label className="flex items-center gap-2 text-xs">
+                                                            <Checkbox
+                                                                checked={qualifiedInvoices[row.id] ?? true}
+                                                                onCheckedChange={(checked) =>
+                                                                    setQualifiedInvoices((prev) => ({
+                                                                        ...prev,
+                                                                        [row.id]: checked === true,
+                                                                    }))
+                                                                }
+                                                            />
+                                                            適格請求書あり
+                                                        </label>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <BankImportRowEditDialog
+                                                        rowId={row.id}
+                                                        isDeposit={row.is_deposit}
+                                                        initialValues={{
+                                                            transaction_date: row.transaction_date,
+                                                            description: row.description,
+                                                            amount: row.amount,
+                                                            account_id: row.account_id ?? null,
+                                                            consumption_tax_category: taxCategories[row.id],
+                                                            has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
+                                                        }}
+                                                        accountGroups={accountGroups}
+                                                        expenseAccounts={expenseAccounts}
+                                                        salesTaxCategories={salesTaxCategories}
+                                                        purchaseTaxCategories={purchaseTaxCategories}
+                                                        hasActiveFiscalYear={hasActiveFiscalYear}
+                                                        trigger={
+                                                            <Button type="button" variant="ghost" size="sm">
+                                                                <Pencil className="size-4" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                    <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
+                                                        スキップ
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </DataTable>
 
-                        <div className="flex justify-end">
+                        <StickyActionBar>
+                            <span className="text-muted-foreground text-sm">
+                                <span className="text-foreground font-semibold">{selectedIds.size}件</span>を選択中
+                            </span>
                             <Button type="submit" disabled={processing || selectedIds.size === 0}>
                                 {processing ? '記帳中...' : `選択した${selectedIds.size}件を一括記帳`}
                             </Button>
-                        </div>
+                        </StickyActionBar>
                     </form>
                 )}
-            </div>
+            </PageContainer>
         </AppLayout>
     );
 }

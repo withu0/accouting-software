@@ -1,11 +1,16 @@
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DataTable, DataTableHeader } from '@/components/data-table';
+import { EmptyState } from '@/components/empty-state';
+import { FlashAlert } from '@/components/flash-alert';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
+import { Pagination } from '@/components/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { formatDate } from '@/lib/dates';
-import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { CheckCircle2, History, Upload } from 'lucide-react';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link } from '@inertiajs/react';
+import { History, Upload } from 'lucide-react';
 
 interface ImportRecord {
     id: number;
@@ -46,124 +51,106 @@ const statusLabels: Record<string, string> = {
 };
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' {
-    if (status === 'completed') {
-        return 'default';
-    }
-    if (status === 'pending') {
-        return 'secondary';
-    }
+    if (status === 'completed') return 'default';
+    if (status === 'pending') return 'secondary';
     return 'destructive';
 }
 
-export default function BankImportHistory({ imports }: Props) {
-    const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
+function ProgressBar({ value, max }: { value: number; max: number }) {
+    const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+    return (
+        <div className="flex items-center gap-2">
+            <div className="bg-muted h-1.5 w-20 overflow-hidden rounded-full">
+                <div className="bg-primary h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-muted-foreground text-xs tabular-nums">{pct}%</span>
+        </div>
+    );
+}
 
+export default function BankImportHistory({ imports }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="取込履歴" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold tracking-tight">取込履歴</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">過去の銀行CSV取込を確認・編集できます</p>
-                    </div>
-                    <Button asChild variant="outline">
-                        <Link href={route('bank-import')}>
-                            <Upload className="size-4" />
-                            新規取込
-                        </Link>
-                    </Button>
-                </div>
+            <PageContainer size="full">
+                <PageHeader
+                    title="取込履歴"
+                    description="過去の銀行CSV取込を確認・編集できます"
+                    actions={
+                        <Button asChild variant="outline">
+                            <Link href={route('bank-import')}>
+                                <Upload className="size-4" />
+                                新規取込
+                            </Link>
+                        </Button>
+                    }
+                />
 
-                {flash?.success && (
-                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-                        <CheckCircle2 className="size-4" />
-                        <AlertDescription>{flash.success}</AlertDescription>
-                    </Alert>
-                )}
+                <FlashAlert />
 
                 {imports.data.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-                        <div className="bg-muted flex size-16 items-center justify-center rounded-full">
-                            <History className="text-muted-foreground size-8" />
-                        </div>
-                        <p className="text-muted-foreground text-sm">取込履歴はまだありません</p>
-                        <Button asChild>
-                            <Link href={route('bank-import')}>CSVを取込む</Link>
-                        </Button>
-                    </div>
+                    <EmptyState
+                        icon={History}
+                        title="取込履歴はまだありません"
+                        description="銀行CSVを取り込むと、ここに履歴が表示されます。"
+                        actions={[{ label: 'CSVを取込む', href: route('bank-import') }]}
+                    />
                 ) : (
                     <>
-                        <div className="overflow-x-auto rounded-lg border">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="bg-muted/50 border-b">
-                                        <th className="px-4 py-3 text-left font-medium">取込日時</th>
-                                        <th className="px-4 py-3 text-left font-medium">ファイル名</th>
-                                        <th className="px-4 py-3 text-left font-medium">形式</th>
-                                        <th className="px-4 py-3 text-left font-medium">状態</th>
-                                        <th className="px-4 py-3 text-right font-medium">件数</th>
-                                        <th className="px-4 py-3 text-right font-medium">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {imports.data.map((record) => (
-                                        <tr key={record.id} className="border-b last:border-b-0">
-                                            <td className="px-4 py-3 whitespace-nowrap">{record.imported_at}</td>
-                                            <td className="px-4 py-3">{record.original_filename}</td>
-                                            <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
-                                                {record.detected_format ?? '—'}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <Badge variant={statusVariant(record.status)}>
-                                                    {statusLabels[record.status] ?? record.status}
-                                                </Badge>
-                                            </td>
-                                            <td className="text-muted-foreground px-4 py-3 text-right whitespace-nowrap">
-                                                記帳 {record.confirmed_count} / 未処理 {record.pending_count} / スキップ{' '}
-                                                {record.skipped_count}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                {record.pending_count > 0 ? (
-                                                    <Button asChild variant="outline" size="sm">
-                                                        <Link href={route('bank-import.review', record.id)}>記帳を続ける</Link>
-                                                    </Button>
-                                                ) : (
-                                                    <Button asChild variant="ghost" size="sm">
-                                                        <Link href={route('bank-import.show', record.id)}>詳細</Link>
-                                                    </Button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <DataTable>
+                            <DataTableHeader>
+                                <TableRow>
+                                    <TableHead>取込日時</TableHead>
+                                    <TableHead>ファイル名</TableHead>
+                                    <TableHead>形式</TableHead>
+                                    <TableHead>状態</TableHead>
+                                    <TableHead>進捗</TableHead>
+                                    <TableHead>内訳</TableHead>
+                                    <TableHead className="text-right">操作</TableHead>
+                                </TableRow>
+                            </DataTableHeader>
+                            <TableBody>
+                                {imports.data.map((record) => (
+                                    <TableRow key={record.id}>
+                                        <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                                            {record.imported_at}
+                                        </TableCell>
+                                        <TableCell className="max-w-48 font-medium">{record.original_filename}</TableCell>
+                                        <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                                            {record.detected_format ?? '—'}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={statusVariant(record.status)}>
+                                                {statusLabels[record.status] ?? record.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <ProgressBar value={record.confirmed_count} max={record.row_count} />
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                                            記帳 {record.confirmed_count} / 未処理 {record.pending_count} / スキップ{' '}
+                                            {record.skipped_count}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {record.pending_count > 0 ? (
+                                                <Button asChild variant="default" size="sm">
+                                                    <Link href={route('bank-import.review', record.id)}>記帳を続ける</Link>
+                                                </Button>
+                                            ) : (
+                                                <Button asChild variant="outline" size="sm">
+                                                    <Link href={route('bank-import.show', record.id)}>詳細</Link>
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </DataTable>
 
-                        {imports.last_page > 1 && (
-                            <div className="flex items-center justify-center gap-2">
-                                {imports.links.map((link, index) => {
-                                    if (link.url === null) {
-                                        return (
-                                            <span
-                                                key={index}
-                                                className="text-muted-foreground px-3 py-1 text-sm"
-                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                            />
-                                        );
-                                    }
-
-                                    return (
-                                        <Button key={index} asChild variant={link.active ? 'default' : 'outline'} size="sm">
-                                            <Link href={link.url} preserveScroll dangerouslySetInnerHTML={{ __html: link.label }} />
-                                        </Button>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        <Pagination links={imports.links} />
                     </>
                 )}
-            </div>
+            </PageContainer>
         </AppLayout>
     );
 }

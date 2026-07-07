@@ -1,5 +1,14 @@
 import { type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { DataTable, DataTableHeader } from '@/components/data-table';
+import { EmptyState } from '@/components/empty-state';
+import { FlashAlert } from '@/components/flash-alert';
+import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
+import { StickyActionBar } from '@/components/sticky-action-bar';
+import { SummaryStrip } from '@/components/summary-strip';
 import TransferJournalRowTable, {
     createEmptyRow,
     flattenRowsToLines,
@@ -8,15 +17,16 @@ import TransferJournalRowTable, {
 } from '@/components/transfer-journal-row-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Receipt, Trash2 } from 'lucide-react';
+import { AlertCircle, Receipt, Trash2 } from 'lucide-react';
 import { FormEventHandler, useMemo, useState } from 'react';
 
 interface TransferPreset {
@@ -151,18 +161,10 @@ export default function TransferJournal({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="臨時仕訳（振替伝票）" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">臨時仕訳（振替伝票）</h1>
-                    <p className="text-muted-foreground mt-1 text-sm">通常処理で対応できない例外仕訳を入力します</p>
-                </div>
+            <PageContainer size="full">
+                <PageHeader title="臨時仕訳（振替伝票）" description="通常処理で対応できない例外仕訳を入力します" />
 
-                {flash?.success && (
-                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-                        <CheckCircle2 className="size-4" />
-                        <AlertDescription>{flash.success}</AlertDescription>
-                    </Alert>
-                )}
+                <FlashAlert />
 
                 {!hasActiveFiscalYear && (
                     <Alert variant="destructive">
@@ -177,32 +179,29 @@ export default function TransferJournal({
                     </Alert>
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                            <Receipt className="size-5" />
-                            振替伝票を登録
-                        </CardTitle>
-                        <CardDescription>発生日・借方・貸方・摘要を入力してください</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {presets.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                                {presets.map((preset) => (
-                                    <Button
-                                        key={preset.id}
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={!hasActiveFiscalYear || processing}
-                                        onClick={() => applyPreset(preset)}
-                                    >
-                                        {preset.label}
-                                    </Button>
-                                ))}
-                            </div>
-                        )}
+                {presets.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                        <span className="text-muted-foreground self-center text-xs font-medium">プリセット:</span>
+                        {presets.map((preset) => (
+                            <button
+                                key={preset.id}
+                                type="button"
+                                disabled={!hasActiveFiscalYear || processing}
+                                onClick={() => applyPreset(preset)}
+                                className={cn(
+                                    'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
+                                    'border-border/60 bg-muted/40 text-foreground hover:border-primary/40 hover:bg-primary/5',
+                                    'disabled:pointer-events-none disabled:opacity-50',
+                                )}
+                            >
+                                {preset.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
+                <div className="flex flex-col gap-8">
+                    <FormSection title="振替伝票を登録" description="発生日・借方・貸方・摘要を入力してください">
                         <form onSubmit={submit} className="space-y-4">
                             <div className="grid gap-2 max-w-xs">
                                 <Label htmlFor="entry_date">発生日</Label>
@@ -232,24 +231,18 @@ export default function TransferJournal({
                                 onChange={setRows}
                             />
 
-                            <div className="flex flex-wrap items-center gap-4 text-sm">
-                                <span>
-                                    借方合計: <strong>{formatAmount(debitTotal)}</strong>
-                                </span>
-                                <span>
-                                    貸方合計: <strong>{formatAmount(creditTotal)}</strong>
-                                </span>
-                                {amountsMismatch && (
-                                    <span className="text-destructive font-medium">不足額: {formatAmount(shortageAmount)}</span>
-                                )}
-                            </div>
-
-                            {amountsMismatch && (
-                                <Alert variant="destructive">
-                                    <AlertCircle className="size-4" />
-                                    <AlertDescription>借方合計と貸方合計が一致していません。</AlertDescription>
-                                </Alert>
-                            )}
+                            <SummaryStrip
+                                items={[
+                                    { label: '借方合計', value: formatAmount(debitTotal) },
+                                    { label: '貸方合計', value: formatAmount(creditTotal) },
+                                    {
+                                        label: '差額',
+                                        value: amountsMismatch ? formatAmount(shortageAmount) : '一致',
+                                        variant: amountsMismatch ? 'warning' : 'success',
+                                        highlight: amountsMismatch,
+                                    },
+                                ]}
+                            />
 
                             <div className="grid gap-2 max-w-xl">
                                 <Label htmlFor="description">摘要</Label>
@@ -271,37 +264,44 @@ export default function TransferJournal({
                                 {processing ? '登録中...' : '登録する'}
                             </Button>
                         </form>
-                    </CardContent>
-                </Card>
+                    </FormSection>
 
-                <div>
-                    <h2 className="mb-4 text-lg font-semibold">登録済みの振替伝票</h2>
-                    {entries.length === 0 ? (
-                        <div className="text-muted-foreground py-8 text-center text-sm">登録された振替伝票はありません</div>
-                    ) : (
-                        <div className="overflow-x-auto rounded-lg border">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="bg-muted/50 border-b">
-                                        <th className="px-4 py-3 text-left font-medium">日付</th>
-                                        <th className="px-4 py-3 text-left font-medium">摘要</th>
-                                        <th className="px-4 py-3 text-left font-medium">仕訳明細</th>
-                                        <th className="px-4 py-3 text-right font-medium">合計</th>
-                                        <th className="px-4 py-3 text-right font-medium">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                    <section className="space-y-4">
+                        <SectionHeader
+                            title="登録済みの振替伝票"
+                            description={entries.length > 0 ? `${entries.length}件の振替伝票が登録されています` : undefined}
+                        />
+
+                        {entries.length === 0 ? (
+                            <EmptyState
+                                icon={Receipt}
+                                title="登録された振替伝票はありません"
+                                description="上のフォームから振替伝票を登録してください。プリセットを使うとよく使う仕訳を素早く入力できます。"
+                            />
+                        ) : (
+                            <DataTable>
+                                <DataTableHeader>
+                                    <TableRow>
+                                        <TableHead>日付</TableHead>
+                                        <TableHead>摘要</TableHead>
+                                        <TableHead>仕訳明細</TableHead>
+                                        <TableHead className="text-right">合計</TableHead>
+                                        <TableHead className="text-right">操作</TableHead>
+                                    </TableRow>
+                                </DataTableHeader>
+                                <TableBody>
                                     {entries.map((entry) => (
-                                        <tr key={entry.id} className="border-b align-top last:border-0">
-                                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(entry.entry_date)}</td>
-                                            <td className="px-4 py-3">{entry.description}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="space-y-2">
+                                        <TableRow key={entry.id} className="align-top">
+                                            <TableCell className="whitespace-nowrap">{formatDate(entry.entry_date)}</TableCell>
+                                            <TableCell className="font-medium">{entry.description}</TableCell>
+                                            <TableCell>
+                                                <div className="space-y-2 text-[13px]">
                                                     {entry.lines.map((line, lineIndex) => (
                                                         <div key={`${entry.id}-${lineIndex}`} className="grid gap-1">
                                                             {line.debit > 0 && (
                                                                 <span>
-                                                                    借 {line.account_name} {formatAmount(line.debit)}
+                                                                    借 {line.account_name}{' '}
+                                                                    <span className="tabular-nums">{formatAmount(line.debit)}</span>
                                                                     <span className="text-muted-foreground ml-2 text-xs">
                                                                         {taxCategoryLabel(
                                                                             line.consumption_tax_category,
@@ -312,7 +312,8 @@ export default function TransferJournal({
                                                             )}
                                                             {line.credit > 0 && (
                                                                 <span>
-                                                                    貸 {line.account_name} {formatAmount(line.credit)}
+                                                                    貸 {line.account_name}{' '}
+                                                                    <span className="tabular-nums">{formatAmount(line.credit)}</span>
                                                                     <span className="text-muted-foreground ml-2 text-xs">
                                                                         {taxCategoryLabel(
                                                                             line.consumption_tax_category,
@@ -324,9 +325,11 @@ export default function TransferJournal({
                                                         </div>
                                                     ))}
                                                 </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-right whitespace-nowrap">{formatAmount(entry.amount)}</td>
-                                            <td className="px-4 py-3 text-right">
+                                            </TableCell>
+                                            <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                                {formatAmount(entry.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-right">
                                                 <Dialog>
                                                     <DialogTrigger asChild>
                                                         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
@@ -355,15 +358,23 @@ export default function TransferJournal({
                                                         </DialogFooter>
                                                     </DialogContent>
                                                 </Dialog>
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                </TableBody>
+                            </DataTable>
+                        )}
+                    </section>
                 </div>
-            </div>
+
+                {amountsMismatch && (
+                    <StickyActionBar variant="warning">
+                        <span className="text-sm">
+                            借方合計と貸方合計が一致していません（差額: {formatAmount(shortageAmount)}）
+                        </span>
+                    </StickyActionBar>
+                )}
+            </PageContainer>
         </AppLayout>
     );
 }

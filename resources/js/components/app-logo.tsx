@@ -7,11 +7,12 @@ export default function AppLogo() {
 
     return (
         <>
-            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-md">
-                <AppLogoIcon className="size-5 fill-current text-white dark:text-black" />
+            <div className="from-primary to-primary/80 text-primary-foreground flex aspect-square size-9 items-center justify-center rounded-xl bg-gradient-to-br shadow-md shadow-primary/25 ring-1 ring-white/20">
+                <AppLogoIcon className="size-5 fill-current text-white" />
             </div>
-            <div className="ml-1 grid flex-1 text-left text-sm">
-                <span className="mb-0.5 truncate leading-none font-semibold">{name}</span>
+            <div className="ml-2 grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
+                <span className="truncate text-sm font-bold tracking-tight">{name}</span>
+                <span className="text-muted-foreground truncate text-[11px] font-medium tracking-wide">会計ソフト</span>
             </div>
         </>
     );

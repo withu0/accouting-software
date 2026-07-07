@@ -2,9 +2,8 @@ import { NavMain } from '@/components/nav-main';
 import { NavOther } from '@/components/nav-other';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { type NavItem, type SharedData } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
+import { type NavItem } from '@/types';
+import { Link } from '@inertiajs/react';
 import { FileText, LayoutGrid, Upload, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -32,37 +31,30 @@ const mainNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-    const { auth } = usePage<SharedData>().props;
-    const companyName = auth.company?.name ?? '会社名未設定';
-
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
+        <Sidebar collapsible="icon" className="border-r border-border/40 bg-sidebar shadow-[4px_0_24px_-16px_rgba(15,40,80,0.12)]">
+            <SidebarHeader className="border-b border-border/40 px-3 py-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-3">
+                <SidebarMenu className="group-data-[collapsible=icon]:items-center">
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
+                        <SidebarMenuButton
+                            size="lg"
+                            asChild
+                            className="hover:bg-transparent group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!p-0"
+                        >
                             <Link href={route('home')} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
-                    <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="text-muted-foreground truncate px-2 text-xs font-medium">{companyName}</div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">{companyName}</TooltipContent>
-                        </Tooltip>
-                    </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarHeader>
 
-            <SidebarContent>
+            <SidebarContent className="gap-1 px-2 py-4 group-data-[collapsible=icon]:px-0">
                 <NavMain items={mainNavItems} />
                 <NavOther />
             </SidebarContent>
 
-            <SidebarFooter>
+            <SidebarFooter className="border-t border-border/40 p-3 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-2">
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

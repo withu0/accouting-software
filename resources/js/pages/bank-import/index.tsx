@@ -1,13 +1,18 @@
+import { FileDropZone } from '@/components/file-drop-zone';
+import { FlashAlert } from '@/components/flash-alert';
+import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
+import { SummaryStrip } from '@/components/summary-strip';
+import { WorkflowSteps, bankImportSteps } from '@/components/workflow-steps';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Upload } from 'lucide-react';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { AlertCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 interface Props {
@@ -20,7 +25,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function BankImportIndex({ hasActiveFiscalYear }: Props) {
-    const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
     const { data, setData, post, processing, errors, reset } = useForm<{ file: File | null }>({
         file: null,
     });
@@ -36,23 +40,18 @@ export default function BankImportIndex({ hasActiveFiscalYear }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="銀行CSV取込" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold tracking-tight">銀行CSV取込</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">法人口座の入出金CSVを取り込み、仕訳候補を作成します</p>
-                    </div>
-                    <Button asChild variant="outline">
-                        <Link href={route('bank-import.history')}>取込履歴</Link>
-                    </Button>
-                </div>
+            <PageContainer size="narrow">
+                <PageHeader
+                    title="銀行CSV取込"
+                    description="法人口座の入出金CSVを取り込み、仕訳候補を作成します"
+                    actions={
+                        <Button asChild variant="outline">
+                            <Link href={route('bank-import.history')}>取込履歴</Link>
+                        </Button>
+                    }
+                />
 
-                {flash?.success && (
-                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-                        <CheckCircle2 className="size-4" />
-                        <AlertDescription>{flash.success}</AlertDescription>
-                    </Alert>
-                )}
+                <WorkflowSteps steps={bankImportSteps} currentStep="upload" />
 
                 {!hasActiveFiscalYear && (
                     <Alert variant="destructive">
@@ -67,36 +66,33 @@ export default function BankImportIndex({ hasActiveFiscalYear }: Props) {
                     </Alert>
                 )}
 
-                <Card className="max-w-lg">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                            <Upload className="size-5" />
-                            CSVファイルをアップロード
-                        </CardTitle>
-                        <CardDescription>
-                            GMOあおぞら・楽天銀行・住信SBIネット銀行など主要銀行のCSVを自動判別して取り込みます
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={submit} className="space-y-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="file">CSVファイル</Label>
-                                <Input
-                                    id="file"
-                                    type="file"
-                                    accept=".csv,.txt"
-                                    disabled={!hasActiveFiscalYear || processing}
-                                    onChange={(e) => setData('file', e.target.files?.[0] ?? null)}
-                                />
-                                <InputError message={errors.file} />
-                            </div>
-                            <Button type="submit" disabled={!hasActiveFiscalYear || processing || !data.file}>
-                                {processing ? '取込中...' : 'アップロードして確認'}
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
-            </div>
+                <FormSection
+                    title="CSVファイルをアップロード"
+                    description="GMOあおぞら・楽天銀行・住信SBIネット銀行など主要銀行のCSVを自動判別して取り込みます"
+                >
+                    <form onSubmit={submit} className="space-y-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="file">CSVファイル</Label>
+                            <FileDropZone
+                                file={data.file}
+                                disabled={!hasActiveFiscalYear || processing}
+                                onFileChange={(file) => setData('file', file)}
+                            />
+                            <InputError message={errors.file} />
+                        </div>
+                        <Button type="submit" disabled={!hasActiveFiscalYear || processing || !data.file}>
+                            {processing ? '取込中...' : 'アップロードして確認'}
+                        </Button>
+                    </form>
+                </FormSection>
+
+                <SummaryStrip
+                    items={[
+                        { label: '対応銀行', value: 'GMOあおぞら / 楽天 / 住信SBI 他' },
+                        { label: '形式', value: '自動判別' },
+                    ]}
+                />
+            </PageContainer>
         </AppLayout>
     );
 }

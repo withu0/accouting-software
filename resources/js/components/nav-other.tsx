@@ -9,6 +9,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { getPathname, isNavItemActive, navItemActiveClassName, navSubItemActiveClassName } from '@/lib/nav';
 import { Link, usePage } from '@inertiajs/react';
 import { Calendar, ChevronRight, FileSpreadsheet, List, Receipt, Settings } from 'lucide-react';
 
@@ -27,44 +28,49 @@ const enabledItems = [
 
 export function NavOther() {
     const page = usePage();
+    const otherSectionActive =
+        getPathname(page.url) === getPathname(route('other')) ||
+        enabledItems.some((item) => isNavItemActive(page.url, item.url));
 
     return (
-        <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>その他</SidebarGroupLabel>
-            <SidebarMenu>
+        <SidebarGroup className="mt-6 px-1 py-0 group-data-[collapsible=icon]:mt-2 group-data-[collapsible=icon]:px-0">
+            <SidebarGroupLabel className="text-muted-foreground/80 mb-2 px-3 text-[10px] font-semibold tracking-[0.12em] uppercase">
+                その他
+            </SidebarGroupLabel>
+            <SidebarMenu className="group-data-[collapsible=icon]:items-center">
                 <Collapsible asChild defaultOpen className="group/collapsible">
                     <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
-                            <SidebarMenuButton tooltip="その他">
+                            <SidebarMenuButton
+                                tooltip="その他"
+                                isActive={otherSectionActive}
+                                className={navItemActiveClassName}
+                            >
                                 <Settings />
-                                <span>その他</span>
-                                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                <span className="group-data-[collapsible=icon]:hidden">その他</span>
+                                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[collapsible=icon]:hidden group-data-[state=open]/collapsible:rotate-90" />
                             </SidebarMenuButton>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                             <SidebarMenuSub>
-                                {/* {disabledItems.map((item) => (
-                                    <SidebarMenuSubItem key={item.title}>
-                                        <SidebarMenuSubButton
-                                            aria-disabled
-                                            className="pointer-events-none opacity-50"
-                                        >
-                                            <item.icon />
-                                            <span>{item.title}</span>
-                                            <span className="ml-auto text-xs text-muted-foreground">準備中</span>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                ))} */}
-                                {enabledItems.map((item) => (
-                                    <SidebarMenuSubItem key={item.title}>
-                                        <SidebarMenuSubButton asChild isActive={item.url === page.url}>
-                                            <Link href={item.url} prefetch>
-                                                <item.icon />
-                                                <span>{item.title}</span>
-                                            </Link>
-                                        </SidebarMenuSubButton>
-                                    </SidebarMenuSubItem>
-                                ))}
+                                {enabledItems.map((item) => {
+                                    const isActive = isNavItemActive(page.url, item.url);
+
+                                    return (
+                                        <SidebarMenuSubItem key={item.title}>
+                                            <SidebarMenuSubButton
+                                                asChild
+                                                isActive={isActive}
+                                                className={navSubItemActiveClassName}
+                                            >
+                                                <Link href={item.url} prefetch aria-current={isActive ? 'page' : undefined}>
+                                                    <item.icon />
+                                                    <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                    );
+                                })}
                             </SidebarMenuSub>
                         </CollapsibleContent>
                     </SidebarMenuItem>

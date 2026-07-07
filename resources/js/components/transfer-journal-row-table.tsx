@@ -224,8 +224,8 @@ export default function TransferJournalRowTable({
 
     return (
         <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[760px] text-sm">
+            <div className="rounded-lg border">
+                <table className="w-full text-sm">
                     <thead>
                         <tr className="bg-muted/50 border-b">
                             <th className="px-3 py-2 text-left font-medium" colSpan={3}>

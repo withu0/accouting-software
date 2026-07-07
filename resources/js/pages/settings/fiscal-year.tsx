@@ -1,5 +1,9 @@
-import HeadingSmall from '@/components/heading-small';
+import { FlashAlert } from '@/components/flash-alert';
+import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
+import { StatCard } from '@/components/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +13,7 @@ import { formatDate, toDateInputValue } from '@/lib/dates';
 import { type BreadcrumbItem, type Company } from '@/types';
 import { Transition } from '@headlessui/react';
 import { Head, useForm } from '@inertiajs/react';
+import { CalendarDays } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 interface FiscalYear {
@@ -79,13 +84,15 @@ export default function FiscalYearSettings({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="会計期間設定" />
-            <div className="flex h-full flex-1 flex-col gap-8 p-4 md:p-6">
-                <section className="max-w-lg space-y-4">
-                    <HeadingSmall
-                        title="会社情報"
-                        description="決算書PDFのヘッダーに表示される会社名・住所・代表者名を設定します。"
-                    />
+            <PageContainer size="narrow">
+                <PageHeader title="会計期間設定" description="会社情報と会計年度を設定します" />
 
+                <FlashAlert />
+
+                <FormSection
+                    title="会社情報"
+                    description="決算書PDFのヘッダーに表示される会社名・住所・代表者名を設定します。"
+                >
                     <form onSubmit={submitCompany} className="space-y-4">
                         <div className="grid gap-2">
                             <Label htmlFor="name">会社名</Label>
@@ -135,6 +142,9 @@ export default function FiscalYearSettings({
                                     ))}
                                 </SelectContent>
                             </Select>
+                            <p className="text-muted-foreground text-xs">
+                                消費税区分集計レポートの計算方式に影響します。変更時は税区分の設定も合わせて確認してください。
+                            </p>
                             <InputError message={companyForm.errors.consumption_tax_method} />
                         </div>
 
@@ -175,23 +185,20 @@ export default function FiscalYearSettings({
                             </Transition>
                         </div>
                     </form>
-                </section>
+                </FormSection>
 
-                <section className="max-w-lg space-y-4">
-                    <HeadingSmall
-                        title="会計期間設定"
-                        description="会計年度の開始日と終了日を設定します。仕訳はこの期間内の日付のみ登録できます。"
-                    />
+                {activeFiscalYear && (
+                    <StatCard label="現在の会計期間" icon={CalendarDays}>
+                        <p className="text-base font-semibold">
+                            {formatDate(activeFiscalYear.start_date)} 〜 {formatDate(activeFiscalYear.end_date)}
+                        </p>
+                    </StatCard>
+                )}
 
-                    {activeFiscalYear && (
-                        <div className="bg-muted/50 rounded-lg border px-4 py-3 text-sm">
-                            <span className="text-muted-foreground">現在の会計期間: </span>
-                            <span className="font-medium">
-                                {formatDate(activeFiscalYear.start_date)} 〜 {formatDate(activeFiscalYear.end_date)}
-                            </span>
-                        </div>
-                    )}
-
+                <FormSection
+                    title="会計期間"
+                    description="会計年度の開始日と終了日を設定します。仕訳はこの期間内の日付のみ登録できます。"
+                >
                     <form onSubmit={submitFiscalYear} className="space-y-6">
                         <div className="grid gap-2">
                             <Label htmlFor="start_date">開始日</Label>
@@ -235,10 +242,10 @@ export default function FiscalYearSettings({
                     </form>
 
                     {fiscalYears.length > 1 && (
-                        <div className="text-muted-foreground text-sm">登録済みの会計期間: {fiscalYears.length} 件</div>
+                        <p className="text-muted-foreground text-sm">登録済みの会計期間: {fiscalYears.length} 件</p>
                     )}
-                </section>
-            </div>
+                </FormSection>
+            </PageContainer>
         </AppLayout>
     );
 }

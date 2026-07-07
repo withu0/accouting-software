@@ -1,19 +1,28 @@
 import ConsumptionTaxFields, { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { DataTable, DataTableHeader } from '@/components/data-table';
+import { EmptyState } from '@/components/empty-state';
+import { FlashAlert } from '@/components/flash-alert';
+import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
+import { SplitWorkspace } from '@/components/split-workspace';
+import { SummaryStrip } from '@/components/summary-strip';
 import ReceiptScanUpload from '@/components/receipt-scan-upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Pencil, Trash2, Wallet } from 'lucide-react';
-import { FormEventHandler, useEffect, useState } from 'react';
+import { AlertCircle, Pencil, Receipt, Trash2 } from 'lucide-react';
+import { FormEventHandler, useEffect, useMemo, useState } from 'react';
 
 interface ExpenseAccount {
     id: number;
@@ -296,21 +305,24 @@ export default function AdvanceExpensesIndex({
         });
     };
 
+    const monthTotals = useMemo(() => {
+        const totals = new Map<string, number>();
+        for (const entry of entries) {
+            const month = entry.entry_date.slice(0, 7);
+            totals.set(month, (totals.get(month) ?? 0) + entry.amount);
+        }
+        return Array.from(totals.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+    }, [entries]);
+
+    const totalAmount = useMemo(() => entries.reduce((sum, e) => sum + e.amount, 0), [entries]);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="立替経費入力" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">立替経費入力</h1>
-                    <p className="text-muted-foreground mt-1 text-sm">社長個人が支払った経費を登録します</p>
-                </div>
+            <PageContainer size="full">
+                <PageHeader title="立替経費入力" description="社長個人が支払った経費を登録します" />
 
-                {flash?.success && (
-                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-                        <CheckCircle2 className="size-4" />
-                        <AlertDescription>{flash.success}</AlertDescription>
-                    </Alert>
-                )}
+                <FlashAlert />
 
                 {!hasActiveFiscalYear && (
                     <Alert variant="destructive">
@@ -325,189 +337,207 @@ export default function AdvanceExpensesIndex({
                     </Alert>
                 )}
 
-                <Card className="max-w-lg">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                            <Wallet className="size-5" />
-                            立替経費を登録
-                        </CardTitle>
-                        <CardDescription>
-                            領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額を自動入力できます。経費科目などは手入力してください。
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={submit} className="space-y-4">
-                            <ReceiptScanUpload
-                                available={receiptScanAvailable}
-                                disabled={!hasActiveFiscalYear || processing}
-                                error={pageErrors?.receipt}
+                <SplitWorkspace
+                    left={
+                        <FormSection
+                            title="立替経費を登録"
+                            description="領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額を自動入力できます。経費科目などは手入力してください。"
+                        >
+                            <form onSubmit={submit} className="space-y-4">
+                                <ReceiptScanUpload
+                                    available={receiptScanAvailable}
+                                    disabled={!hasActiveFiscalYear || processing}
+                                    error={pageErrors?.receipt}
+                                />
+
+                                {scanNotice && (
+                                    <Alert>
+                                        <AlertCircle className="size-4" />
+                                        <AlertDescription>{scanNotice}</AlertDescription>
+                                    </Alert>
+                                )}
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="entry_date">日付</Label>
+                                    <Input
+                                        id="entry_date"
+                                        type="date"
+                                        value={data.entry_date}
+                                        disabled={!hasActiveFiscalYear || processing}
+                                        onChange={(e) => setData('entry_date', e.target.value)}
+                                        required
+                                    />
+                                    <InputError message={errors.entry_date} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="amount">金額</Label>
+                                    <Input
+                                        id="amount"
+                                        type="number"
+                                        min="1"
+                                        value={data.amount}
+                                        disabled={!hasActiveFiscalYear || processing}
+                                        onChange={(e) => setData('amount', e.target.value)}
+                                        required
+                                    />
+                                    <InputError message={errors.amount} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="description">摘要</Label>
+                                    <Input
+                                        id="description"
+                                        type="text"
+                                        value={data.description}
+                                        disabled={!hasActiveFiscalYear || processing}
+                                        onChange={(e) => setData('description', e.target.value)}
+                                        required
+                                    />
+                                    <InputError message={errors.description} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="account_id">経費科目</Label>
+                                    <Select
+                                        value={data.account_id}
+                                        onValueChange={(v) => {
+                                            setData({
+                                                ...data,
+                                                account_id: v,
+                                                consumption_tax_category: defaultCategoryForAccount(
+                                                    Number(v),
+                                                    expenseAccounts,
+                                                    'taxable_purchase_10',
+                                                ),
+                                            });
+                                        }}
+                                        disabled={!hasActiveFiscalYear || processing}
+                                    >
+                                        <SelectTrigger id="account_id">
+                                            <SelectValue placeholder="経費科目を選択" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {expenseAccounts.map((account) => (
+                                                <SelectItem key={account.id} value={String(account.id)}>
+                                                    {account.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={errors.account_id} />
+                                </div>
+
+                                <ConsumptionTaxFields
+                                    idPrefix="create-tax"
+                                    category={data.consumption_tax_category}
+                                    hasQualifiedInvoice={data.has_qualified_invoice}
+                                    categoryOptions={purchaseTaxCategories}
+                                    onCategoryChange={(value) => setData('consumption_tax_category', value)}
+                                    onQualifiedInvoiceChange={(value) => setData('has_qualified_invoice', value)}
+                                    categoryError={errors.consumption_tax_category}
+                                    qualifiedInvoiceError={errors.has_qualified_invoice}
+                                />
+
+                                <Button type="submit" disabled={!hasActiveFiscalYear || processing}>
+                                    {processing ? '登録中...' : '登録する'}
+                                </Button>
+                            </form>
+                        </FormSection>
+                    }
+                    right={
+                        <>
+                            <SectionHeader
+                                title="登録済みの立替経費"
+                                description={entries.length > 0 ? `${entries.length}件の立替経費が登録されています` : undefined}
                             />
 
-                            {scanNotice && (
-                                <Alert>
-                                    <AlertCircle className="size-4" />
-                                    <AlertDescription>{scanNotice}</AlertDescription>
-                                </Alert>
+                            {entries.length > 0 && (
+                                <SummaryStrip
+                                    items={[
+                                        { label: '件数', value: `${entries.length}件` },
+                                        { label: '合計金額', value: formatAmount(totalAmount), highlight: true },
+                                        ...monthTotals.slice(0, 2).map(([month, amount]) => ({
+                                            label: month.replace('-', '年') + '月',
+                                            value: formatAmount(amount),
+                                        })),
+                                    ]}
+                                />
                             )}
 
-                            <div className="grid gap-2">
-                                <Label htmlFor="entry_date">日付</Label>
-                                <Input
-                                    id="entry_date"
-                                    type="date"
-                                    value={data.entry_date}
-                                    disabled={!hasActiveFiscalYear || processing}
-                                    onChange={(e) => setData('entry_date', e.target.value)}
-                                    required
+                            {entries.length === 0 ? (
+                                <EmptyState
+                                    icon={Receipt}
+                                    title="登録された立替経費はありません"
+                                    description="左のフォームから立替経費を登録するか、領収書をスキャンして自動入力できます。"
                                 />
-                                <InputError message={errors.entry_date} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="amount">金額</Label>
-                                <Input
-                                    id="amount"
-                                    type="number"
-                                    min="1"
-                                    value={data.amount}
-                                    disabled={!hasActiveFiscalYear || processing}
-                                    onChange={(e) => setData('amount', e.target.value)}
-                                    required
-                                />
-                                <InputError message={errors.amount} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="description">摘要</Label>
-                                <Input
-                                    id="description"
-                                    type="text"
-                                    value={data.description}
-                                    disabled={!hasActiveFiscalYear || processing}
-                                    onChange={(e) => setData('description', e.target.value)}
-                                    required
-                                />
-                                <InputError message={errors.description} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="account_id">経費科目</Label>
-                                <Select
-                                    value={data.account_id}
-                                    onValueChange={(v) => {
-                                        setData({
-                                            ...data,
-                                            account_id: v,
-                                            consumption_tax_category: defaultCategoryForAccount(
-                                                Number(v),
-                                                expenseAccounts,
-                                                'taxable_purchase_10',
-                                            ),
-                                        });
-                                    }}
-                                    disabled={!hasActiveFiscalYear || processing}
-                                >
-                                    <SelectTrigger id="account_id">
-                                        <SelectValue placeholder="経費科目を選択" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {expenseAccounts.map((account) => (
-                                            <SelectItem key={account.id} value={String(account.id)}>
-                                                {account.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <InputError message={errors.account_id} />
-                            </div>
-
-                            <ConsumptionTaxFields
-                                idPrefix="create-tax"
-                                category={data.consumption_tax_category}
-                                hasQualifiedInvoice={data.has_qualified_invoice}
-                                categoryOptions={purchaseTaxCategories}
-                                onCategoryChange={(value) => setData('consumption_tax_category', value)}
-                                onQualifiedInvoiceChange={(value) => setData('has_qualified_invoice', value)}
-                                categoryError={errors.consumption_tax_category}
-                                qualifiedInvoiceError={errors.has_qualified_invoice}
-                            />
-
-                            <Button type="submit" disabled={!hasActiveFiscalYear || processing}>
-                                {processing ? '登録中...' : '登録する'}
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
-
-                <div>
-                    <h2 className="mb-4 text-lg font-semibold">登録済みの立替経費</h2>
-                    {entries.length === 0 ? (
-                        <div className="text-muted-foreground py-8 text-center text-sm">登録された立替経費はありません</div>
-                    ) : (
-                        <div className="overflow-x-auto rounded-lg border">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="bg-muted/50 border-b">
-                                        <th className="px-4 py-3 text-left font-medium">日付</th>
-                                        <th className="px-4 py-3 text-left font-medium">摘要</th>
-                                        <th className="px-4 py-3 text-left font-medium">経費科目</th>
-                                        <th className="px-4 py-3 text-right font-medium">金額</th>
-                                        <th className="px-4 py-3 text-right font-medium">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                            ) : (
+                                <DataTable>
+                                <DataTableHeader>
+                                    <TableRow>
+                                        <TableHead>日付</TableHead>
+                                        <TableHead>摘要</TableHead>
+                                        <TableHead>経費科目</TableHead>
+                                        <TableHead className="text-right">金額</TableHead>
+                                        <TableHead className="text-right">操作</TableHead>
+                                    </TableRow>
+                                </DataTableHeader>
+                                <TableBody>
                                     {entries.map((entry) => (
-                                        <tr key={entry.id} className="border-b last:border-0">
-                                            <td className="px-4 py-3 whitespace-nowrap">{formatDate(entry.entry_date)}</td>
-                                            <td className="px-4 py-3">{entry.description}</td>
-                                            <td className="px-4 py-3">{entry.account_name}</td>
-                                            <td className="px-4 py-3 text-right whitespace-nowrap">{formatAmount(entry.amount)}</td>
-                                            <td className="px-4 py-3 text-right">
+                                        <TableRow key={entry.id}>
+                                            <TableCell className="whitespace-nowrap">{formatDate(entry.entry_date)}</TableCell>
+                                            <TableCell>{entry.description}</TableCell>
+                                            <TableCell>{entry.account_name}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                                {formatAmount(entry.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-right">
                                                 <div className="flex items-center justify-end gap-1">
-                                                <AdvanceExpenseEditDialog
-                                                    entry={entry}
-                                                    expenseAccounts={expenseAccounts}
-                                                    purchaseTaxCategories={purchaseTaxCategories}
-                                                    hasActiveFiscalYear={hasActiveFiscalYear}
-                                                />
-                                                <Dialog>
-                                                    <DialogTrigger asChild>
-                                                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                                                            <Trash2 className="size-4" />
-                                                        </Button>
-                                                    </DialogTrigger>
-                                                    <DialogContent>
-                                                        <DialogTitle>立替経費を削除しますか？</DialogTitle>
-                                                        <DialogDescription>
-                                                            {formatDate(entry.entry_date)} — {entry.description}（{formatAmount(entry.amount)}）を削除します。この操作は取り消せません。
-                                                        </DialogDescription>
-                                                        <DialogFooter>
-                                                            <DialogClose asChild>
-                                                                <Button variant="outline">キャンセル</Button>
-                                                            </DialogClose>
-                                                            <Button
-                                                                variant="destructive"
-                                                                onClick={() => {
-                                                                    router.delete(route('advance-expenses.destroy', entry.id), {
-                                                                        preserveScroll: true,
-                                                                    });
-                                                                }}
-                                                            >
-                                                                削除する
+                                                    <AdvanceExpenseEditDialog
+                                                        entry={entry}
+                                                        expenseAccounts={expenseAccounts}
+                                                        purchaseTaxCategories={purchaseTaxCategories}
+                                                        hasActiveFiscalYear={hasActiveFiscalYear}
+                                                    />
+                                                    <Dialog>
+                                                        <DialogTrigger asChild>
+                                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                                                <Trash2 className="size-4" />
                                                             </Button>
-                                                        </DialogFooter>
-                                                    </DialogContent>
-                                                </Dialog>
+                                                        </DialogTrigger>
+                                                        <DialogContent>
+                                                            <DialogTitle>立替経費を削除しますか？</DialogTitle>
+                                                            <DialogDescription>
+                                                                {formatDate(entry.entry_date)} — {entry.description}（{formatAmount(entry.amount)}）を削除します。この操作は取り消せません。
+                                                            </DialogDescription>
+                                                            <DialogFooter>
+                                                                <DialogClose asChild>
+                                                                    <Button variant="outline">キャンセル</Button>
+                                                                </DialogClose>
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    onClick={() => {
+                                                                        router.delete(route('advance-expenses.destroy', entry.id), {
+                                                                            preserveScroll: true,
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    削除する
+                                                                </Button>
+                                                            </DialogFooter>
+                                                        </DialogContent>
+                                                    </Dialog>
                                                 </div>
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            </div>
+                                </TableBody>
+                                </DataTable>
+                            )}
+                        </>
+                    }
+                />
+            </PageContainer>
         </AppLayout>
     );
 }

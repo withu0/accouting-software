@@ -1,10 +1,17 @@
-import HeadingSmall from '@/components/heading-small';
+import { DataTable, DataTableHeader } from '@/components/data-table';
+import { FilterToolbar } from '@/components/filter-toolbar';
+import { FlashAlert } from '@/components/flash-alert';
+import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
+import { PageContainer } from '@/components/page-container';
+import { PageHeader } from '@/components/page-header';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
+    DialogClose,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -12,12 +19,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { CheckCircle2, Pencil, Trash2 } from 'lucide-react';
-import { FormEventHandler, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { FormEventHandler, useMemo, useState } from 'react';
 
 interface AccountItem {
     id: number;
@@ -52,12 +60,24 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function AccountSettings({ accountGroups, accountTypes, taxCategoryOptions }: Props) {
-    const { flash, errors } = usePage<SharedData & { flash?: { success?: string }; errors?: Record<string, string> }>().props;
+    const { errors } = usePage<SharedData & { flash?: { success?: string }; errors?: Record<string, string> }>().props;
     const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
+    const [deletingAccount, setDeletingAccount] = useState<AccountItem | null>(null);
     const [activeTab, setActiveTab] = useState('expense');
+    const [searchQuery, setSearchQuery] = useState('');
 
     const activeGroupLabel = accountTypes.find((type) => type.value === activeTab)?.label;
     const activeAccounts = activeGroupLabel ? (accountGroups[activeGroupLabel] ?? []) : [];
+
+    const filteredAccounts = useMemo(() => {
+        if (!searchQuery.trim()) {
+            return activeAccounts;
+        }
+        const query = searchQuery.trim().toLowerCase();
+        return activeAccounts.filter(
+            (account) => account.name.toLowerCase().includes(query) || account.code.toLowerCase().includes(query),
+        );
+    }, [activeAccounts, searchQuery]);
 
     const createForm = useForm({
         code: '',
@@ -112,28 +132,19 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
     };
 
     const handleDelete = (account: AccountItem) => {
-        if (!confirm(`「${account.name}」を削除しますか？`)) {
-            return;
-        }
-
-        router.delete(route('accounts.destroy', account.id), { preserveScroll: true });
+        router.delete(route('accounts.destroy', account.id), {
+            preserveScroll: true,
+            onSuccess: () => setDeletingAccount(null),
+        });
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="勘定科目設定" />
-            <div className="flex h-full flex-1 flex-col gap-8 p-4 md:p-6">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">勘定科目設定</h1>
-                    <p className="text-muted-foreground mt-1 text-sm">仕訳で使用する勘定科目の追加・編集・削除</p>
-                </div>
+            <PageContainer size="full">
+                <PageHeader title="勘定科目設定" description="仕訳で使用する勘定科目の追加・編集・削除" />
 
-                {flash?.success && (
-                    <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-                        <CheckCircle2 className="size-4" />
-                        <AlertDescription>{flash.success}</AlertDescription>
-                    </Alert>
-                )}
+                <FlashAlert />
 
                 {errors?.account && (
                     <Alert variant="destructive">
@@ -141,166 +152,181 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                     </Alert>
                 )}
 
-                <section className="max-w-2xl space-y-4">
-                    <HeadingSmall title="勘定科目を追加" description="新しい勘定科目を登録します。" />
-
-                    <form onSubmit={submitCreate} className="grid gap-4 sm:grid-cols-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="create_code">科目コード</Label>
-                            <Input
-                                id="create_code"
-                                value={createForm.data.code}
-                                onChange={(e) => createForm.setData('code', e.target.value)}
-                                placeholder="5120"
-                                required
-                            />
-                            <InputError message={createForm.errors.code} />
-                        </div>
-
-                        <div className="grid gap-2 sm:col-span-2">
-                            <Label htmlFor="create_name">科目名</Label>
-                            <Input
-                                id="create_name"
-                                value={createForm.data.name}
-                                onChange={(e) => createForm.setData('name', e.target.value)}
-                                placeholder="新規経費科目"
-                                required
-                            />
-                            <InputError message={createForm.errors.name} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="create_type">区分</Label>
-                            <Select
-                                value={createForm.data.type}
-                                onValueChange={(v) => {
-                                    const defaultCategory = optionsForType(v)[0]?.value ?? 'out_of_scope';
-                                    createForm.setData({
-                                        ...createForm.data,
-                                        type: v,
-                                        default_consumption_tax_category: defaultCategory,
-                                    });
-                                    setActiveTab(v);
-                                }}
-                            >
-                                <SelectTrigger id="create_type">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {accountTypes.map((type) => (
-                                        <SelectItem key={type.value} value={type.value}>
-                                            {type.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={createForm.errors.type} />
-                        </div>
-
-                        <div className="grid gap-2 sm:col-span-4">
-                            <Label htmlFor="create_tax_category">デフォルト税区分</Label>
-                            <Select
-                                value={createForm.data.default_consumption_tax_category}
-                                onValueChange={(v) => createForm.setData('default_consumption_tax_category', v)}
-                            >
-                                <SelectTrigger id="create_tax_category">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {optionsForType(createForm.data.type).map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={createForm.errors.default_consumption_tax_category} />
-                        </div>
-
-                        <div className="sm:col-span-4">
-                            <Button type="submit" disabled={createForm.processing}>
-                                追加する
-                            </Button>
-                        </div>
-                    </form>
-                </section>
-
-                <section className="space-y-4">
-                    <HeadingSmall title="勘定科目一覧" description="区分ごとに表示を切り替えて確認・編集できます。" />
-
-                    <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+                <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
+                    <nav className="surface-card space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
                         {accountTypes.map((type) => (
                             <button
                                 key={type.value}
                                 type="button"
-                                onClick={() => setActiveTab(type.value)}
+                                onClick={() => {
+                                    setActiveTab(type.value);
+                                    setSearchQuery('');
+                                }}
                                 className={cn(
-                                    'rounded-md px-3.5 py-1.5 text-sm transition-colors',
+                                    'flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
                                     activeTab === type.value
-                                        ? 'bg-background text-foreground shadow-xs'
-                                        : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                                        ? 'bg-primary text-primary-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                                 )}
                             >
                                 {type.label}
                             </button>
                         ))}
-                    </div>
+                    </nav>
 
-                    <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-muted/50 border-b">
-                                    <th className="px-4 py-3 text-left font-medium">コード</th>
-                                    <th className="px-4 py-3 text-left font-medium">科目名</th>
-                                    <th className="px-4 py-3 text-left font-medium">デフォルト税区分</th>
-                                    <th className="px-4 py-3 text-right font-medium">表示順</th>
-                                    <th className="px-4 py-3 text-right font-medium">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {activeAccounts.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} className="text-muted-foreground px-4 py-8 text-center">
-                                            この区分の勘定科目はありません
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    activeAccounts.map((account) => (
-                                        <tr key={account.id} className="border-b last:border-0">
-                                            <td className="px-4 py-3 font-mono">{account.code}</td>
-                                            <td className="px-4 py-3">{account.name}</td>
-                                            <td className="text-muted-foreground px-4 py-3">
-                                                {optionsForType(account.type).find(
-                                                    (option) => option.value === account.default_consumption_tax_category,
-                                                )?.label ?? '—'}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">{account.display_order}</td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(account)}>
-                                                        <Pencil className="size-4" />
-                                                        編集
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        disabled={account.is_in_use}
-                                                        onClick={() => handleDelete(account)}
-                                                        title={account.is_in_use ? '仕訳等で使用中のため削除できません' : undefined}
-                                                    >
-                                                        <Trash2 className="size-4" />
-                                                        削除
-                                                    </Button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                    <div className="min-w-0 space-y-6">
+                        <FormSection title="新規科目" description="新しい勘定科目を登録します。">
+                            <form onSubmit={submitCreate} className="grid gap-4 sm:grid-cols-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="create_code">科目コード</Label>
+                                    <Input
+                                        id="create_code"
+                                        value={createForm.data.code}
+                                        onChange={(e) => createForm.setData('code', e.target.value)}
+                                        placeholder="5120"
+                                        required
+                                    />
+                                    <InputError message={createForm.errors.code} />
+                                </div>
+
+                                <div className="grid gap-2 sm:col-span-2">
+                                    <Label htmlFor="create_name">科目名</Label>
+                                    <Input
+                                        id="create_name"
+                                        value={createForm.data.name}
+                                        onChange={(e) => createForm.setData('name', e.target.value)}
+                                        placeholder="新規経費科目"
+                                        required
+                                    />
+                                    <InputError message={createForm.errors.name} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="create_type">区分</Label>
+                                    <Select
+                                        value={createForm.data.type}
+                                        onValueChange={(v) => {
+                                            const defaultCategory = optionsForType(v)[0]?.value ?? 'out_of_scope';
+                                            createForm.setData({
+                                                ...createForm.data,
+                                                type: v,
+                                                default_consumption_tax_category: defaultCategory,
+                                            });
+                                            setActiveTab(v);
+                                        }}
+                                    >
+                                        <SelectTrigger id="create_type">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {accountTypes.map((type) => (
+                                                <SelectItem key={type.value} value={type.value}>
+                                                    {type.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={createForm.errors.type} />
+                                </div>
+
+                                <div className="grid gap-2 sm:col-span-4">
+                                    <Label htmlFor="create_tax_category">デフォルト税区分</Label>
+                                    <Select
+                                        value={createForm.data.default_consumption_tax_category}
+                                        onValueChange={(v) => createForm.setData('default_consumption_tax_category', v)}
+                                    >
+                                        <SelectTrigger id="create_tax_category">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {optionsForType(createForm.data.type).map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={createForm.errors.default_consumption_tax_category} />
+                                </div>
+
+                                <div className="sm:col-span-4">
+                                    <Button type="submit" disabled={createForm.processing}>
+                                        追加する
+                                    </Button>
+                                </div>
+                            </form>
+                        </FormSection>
+
+                        <div className="space-y-4">
+                            <FilterToolbar sticky={false}>
+                                <div className="flex flex-1 items-center gap-2">
+                                    <Label htmlFor="account-search" className="text-muted-foreground shrink-0 text-xs">
+                                        検索
+                                    </Label>
+                                    <Input
+                                        id="account-search"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="科目名・コードで検索"
+                                        className="h-8 max-w-xs"
+                                    />
+                                </div>
+                            </FilterToolbar>
+
+                            <DataTable>
+                                <DataTableHeader>
+                                    <TableRow>
+                                        <TableHead>コード</TableHead>
+                                        <TableHead>科目名</TableHead>
+                                        <TableHead>デフォルト税区分</TableHead>
+                                        <TableHead className="text-right">表示順</TableHead>
+                                        <TableHead className="text-right">操作</TableHead>
+                                    </TableRow>
+                                </DataTableHeader>
+                                <TableBody>
+                                    {filteredAccounts.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                                                {searchQuery ? '検索条件に一致する科目がありません' : 'この区分の勘定科目はありません'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        filteredAccounts.map((account) => (
+                                            <TableRow key={account.id}>
+                                                <TableCell className="font-mono text-[13px]">{account.code}</TableCell>
+                                                <TableCell className="font-medium">{account.name}</TableCell>
+                                                <TableCell className="text-muted-foreground text-[13px]">
+                                                    {optionsForType(account.type).find(
+                                                        (option) => option.value === account.default_consumption_tax_category,
+                                                    )?.label ?? '—'}
+                                                </TableCell>
+                                                <TableCell className="text-right tabular-nums">{account.display_order}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(account)}>
+                                                            <Pencil className="size-4" />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            disabled={account.is_in_use}
+                                                            onClick={() => setDeletingAccount(account)}
+                                                            title={account.is_in_use ? '仕訳等で使用中のため削除できません' : undefined}
+                                                            className="text-destructive hover:text-destructive"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </DataTable>
+                        </div>
                     </div>
-                </section>
+                </div>
 
                 <Dialog open={editingAccount !== null} onOpenChange={(open) => !open && setEditingAccount(null)}>
                     <DialogContent>
@@ -333,14 +359,17 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
 
                             <div className="grid gap-2">
                                 <Label htmlFor="edit_type">区分</Label>
-                                <Select value={editForm.data.type} onValueChange={(v) => {
-                                    const defaultCategory = optionsForType(v)[0]?.value ?? 'out_of_scope';
-                                    editForm.setData({
-                                        ...editForm.data,
-                                        type: v,
-                                        default_consumption_tax_category: defaultCategory,
-                                    });
-                                }}>
+                                <Select
+                                    value={editForm.data.type}
+                                    onValueChange={(v) => {
+                                        const defaultCategory = optionsForType(v)[0]?.value ?? 'out_of_scope';
+                                        editForm.setData({
+                                            ...editForm.data,
+                                            type: v,
+                                            default_consumption_tax_category: defaultCategory,
+                                        });
+                                    }}
+                                >
                                     <SelectTrigger id="edit_type">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -399,7 +428,27 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                         </form>
                     </DialogContent>
                 </Dialog>
-            </div>
+
+                <Dialog open={deletingAccount !== null} onOpenChange={(open) => !open && setDeletingAccount(null)}>
+                    <DialogContent>
+                        <DialogTitle>勘定科目を削除しますか？</DialogTitle>
+                        <DialogDescription>
+                            「{deletingAccount?.name}」を削除します。この操作は取り消せません。
+                        </DialogDescription>
+                        <DialogFooter>
+                            <DialogClose asChild>
+                                <Button variant="outline">キャンセル</Button>
+                            </DialogClose>
+                            <Button
+                                variant="destructive"
+                                onClick={() => deletingAccount && handleDelete(deletingAccount)}
+                            >
+                                削除する
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </PageContainer>
         </AppLayout>
     );
 }
