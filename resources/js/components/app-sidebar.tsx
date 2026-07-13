@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { FileText, LayoutGrid, Upload, Wallet } from 'lucide-react';
+import { FileText, CreditCard, LayoutGrid, Upload, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -17,6 +17,11 @@ const mainNavItems: NavItem[] = [
         title: '銀行CSV取込',
         url: route('bank-import'),
         icon: Upload,
+    },
+    {
+        title: 'クレジットカードCSV取込',
+        url: route('credit-card-import'),
+        icon: CreditCard,
     },
     {
         title: '立替経費入力',

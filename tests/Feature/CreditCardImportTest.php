@@ -1,0 +1,196 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\CreditCardImportRowStatus;
+use App\Enums\JournalSource;
+use App\Models\Account;
+use App\Models\Company;
+use App\Models\CreditCardImportRow;
+use App\Models\FiscalYear;
+use App\Models\User;
+use Database\Seeders\AccountSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\ConsumptionTaxPayload;
+use Tests\TestCase;
+
+class CreditCardImportTest extends TestCase
+{
+    use ConsumptionTaxPayload;
+    use RefreshDatabase;
+
+    private User $user;
+
+    private Company $company;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(AccountSeeder::class);
+
+        $this->user = User::factory()->create();
+        $this->company = Company::create(['user_id' => $this->user->id]);
+
+        FiscalYear::create([
+            'company_id' => $this->company->id,
+            'start_date' => '2026-04-01',
+            'end_date' => '2027-03-31',
+            'is_active' => true,
+        ]);
+    }
+
+    public function test_upload_csv_shows_review_page(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+
+        $response = $this->actingAs($this->user)
+            ->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseCount('credit_card_import_rows', 15);
+
+        preg_match('/credit-card-import\/(\d+)\/review/', $response->headers->get('Location'), $matches);
+        $importId = (int) $matches[1];
+
+        $this->actingAs($this->user)
+            ->get(route('credit-card-import.review', $importId))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('credit-card-import/review')
+                ->has('rows', 15)
+            );
+    }
+
+    public function test_confirm_creates_expense_and_payable_journal(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $row = CreditCardImportRow::where('description', '株式会社クラウドワークス')->firstOrFail();
+        $expenseAccount = Account::where('name', '外注費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ])
+            ->assertRedirect();
+
+        $payableAccount = Account::where('name', '未払金')->firstOrFail();
+        $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
+
+        $this->assertDatabaseHas('journal_entries', [
+            'company_id' => $this->company->id,
+            'description' => '株式会社クラウドワークス',
+            'source' => JournalSource::CreditCardCsv->value,
+        ]);
+
+        $entry = $this->company->journalEntries()->where('description', '株式会社クラウドワークス')->first();
+        $this->assertNotNull($entry);
+        $this->assertCount(3, $entry->lines);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $expenseAccount->id,
+            'debit' => 1815,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $inputTaxAccount->id,
+            'debit' => 181,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $payableAccount->id,
+            'debit' => 0,
+            'credit' => 1996,
+        ]);
+
+        $row->refresh();
+        $this->assertEquals(CreditCardImportRowStatus::Confirmed, $row->status);
+    }
+
+    public function test_reimport_skips_duplicate_rows(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $firstResponse = $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        preg_match('/credit-card-import\/(\d+)\/review/', $firstResponse->headers->get('Location'), $matches);
+        $importId = (int) $matches[1];
+
+        $row = CreditCardImportRow::where('description', '株式会社クラウドワークス')->firstOrFail();
+        $expenseAccount = Account::where('name', '外注費')->firstOrFail();
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ]);
+
+        $this->assertDatabaseCount('journal_entries', 1);
+
+        $file2 = $this->makeSaisonCsvFile();
+        $response = $this->actingAs($this->user)
+            ->post(route('credit-card-import.store'), ['file' => $file2]);
+
+        $response->assertRedirect(route('credit-card-import.review', $importId));
+        $response->assertSessionHas('importSummary', fn ($summary) => $summary['duplicates'] === 15);
+        $this->assertDatabaseCount('journal_entries', 1);
+        $this->assertEquals(14, CreditCardImportRow::where('credit_card_import_id', $importId)->where('status', CreditCardImportRowStatus::Pending)->count());
+    }
+
+    public function test_skip_row(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $row = CreditCardImportRow::firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.rows.skip', $row->id))
+            ->assertRedirect();
+
+        $row->refresh();
+        $this->assertEquals(CreditCardImportRowStatus::Skipped, $row->status);
+    }
+
+    public function test_csv_outside_fiscal_year_is_rejected(): void
+    {
+        $this->company->activeFiscalYear()?->update([
+            'start_date' => '2025-04-01',
+            'end_date' => '2026-03-31',
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('credit-card-import.store'), ['file' => $this->makeSaisonCsvFile()]);
+
+        $response->assertRedirect(route('credit-card-import'));
+        $response->assertSessionHasErrors('file');
+    }
+
+    public function test_confirm_without_expense_account_shows_friendly_error(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $row = CreditCardImportRow::firstOrFail();
+
+        $response = $this->actingAs($this->user)
+            ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
+                'rows' => [['row_id' => $row->id]],
+            ]);
+
+        $response->assertSessionHasErrors('rows');
+        $response->assertSessionHasErrors([
+            'rows' => '経費科目が未選択の取引があります。すべての取引に経費科目を選択してください。',
+        ]);
+    }
+
+    private function makeSaisonCsvFile(): UploadedFile
+    {
+        $content = file_get_contents(base_path('samples/credit-card-sample/SAISON_2607.csv'));
+
+        return UploadedFile::fake()->createWithContent('SAISON_2607.csv', $content);
+    }
+}

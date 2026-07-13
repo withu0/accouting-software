@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdvanceExpenseController;
 use App\Http\Controllers\BankImportController;
+use App\Http\Controllers\CreditCardImportController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\ReceiptScanController;
 use App\Http\Controllers\ReportController;
@@ -29,6 +30,15 @@ Route::middleware(['auth'])->group(function () {
     Route::post('bank-import/{bankImport}/confirm', [BankImportController::class, 'confirm'])->name('bank-import.confirm');
     Route::patch('bank-import/rows/{row}', [BankImportController::class, 'updateRow'])->name('bank-import.rows.update');
     Route::post('bank-import/rows/{row}/skip', [BankImportController::class, 'skipRow'])->name('bank-import.rows.skip');
+
+    Route::get('credit-card-import', [CreditCardImportController::class, 'index'])->name('credit-card-import');
+    Route::get('credit-card-import/history', [CreditCardImportController::class, 'history'])->name('credit-card-import.history');
+    Route::post('credit-card-import', [CreditCardImportController::class, 'store'])->name('credit-card-import.store');
+    Route::get('credit-card-import/{import}', [CreditCardImportController::class, 'show'])->name('credit-card-import.show');
+    Route::get('credit-card-import/{import}/review', [CreditCardImportController::class, 'review'])->name('credit-card-import.review');
+    Route::post('credit-card-import/{import}/confirm', [CreditCardImportController::class, 'confirm'])->name('credit-card-import.confirm');
+    Route::patch('credit-card-import/rows/{row}', [CreditCardImportController::class, 'updateRow'])->name('credit-card-import.rows.update');
+    Route::post('credit-card-import/rows/{row}/skip', [CreditCardImportController::class, 'skipRow'])->name('credit-card-import.rows.skip');
 
     Route::get('advance-expenses', [AdvanceExpenseController::class, 'index'])->name('advance-expenses');
     Route::post('advance-expenses', [AdvanceExpenseController::class, 'store'])->name('advance-expenses.store');

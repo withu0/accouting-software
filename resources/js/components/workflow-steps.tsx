@@ -72,3 +72,9 @@ export const bankImportSteps: WorkflowStep[] = [
     { id: 'review', label: '確認', description: '記帳内容を確認' },
     { id: 'complete', label: '記帳完了', description: '仕訳を登録' },
 ];
+
+export const creditCardImportSteps: WorkflowStep[] = [
+    { id: 'upload', label: 'アップロード', description: 'CSVを取り込む' },
+    { id: 'review', label: '確認', description: '記帳内容を確認' },
+    { id: 'complete', label: '記帳完了', description: '仕訳を登録' },
+];

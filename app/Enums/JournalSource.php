@@ -5,6 +5,7 @@ namespace App\Enums;
 enum JournalSource: string
 {
     case BankCsv = 'bank_csv';
+    case CreditCardCsv = 'credit_card_csv';
     case AdvanceExpense = 'advance_expense';
     case Transfer = 'transfer';
     case Manual = 'manual';

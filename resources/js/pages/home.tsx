@@ -7,7 +7,7 @@ import { WorkflowSteps, bankImportSteps } from '@/components/workflow-steps';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Building2, CalendarDays, FileText, Settings, Upload, Wallet } from 'lucide-react';
+import { Building2, CalendarDays, CreditCard, FileText, Settings, Upload, Wallet } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -22,6 +22,12 @@ const menuItems = [
         description: '法人口座の入出金を取り込み、自動で仕訳します',
         href: route('bank-import'),
         icon: Upload,
+    },
+    {
+        title: 'クレジットカードCSV取込',
+        description: 'カード明細を取り込み、経費 / 未払金で仕訳します',
+        href: route('credit-card-import'),
+        icon: CreditCard,
     },
     {
         title: '立替経費入力',
