@@ -67,7 +67,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear }: Props) {
 
                 <FormSection
                     title="CSVファイルをアップロード"
-                    description="セゾンカードの明細CSV（Shift_JIS）に対応しています"
+                    description="各種クレジットカード明細CSV（Shift_JIS / UTF-8）に対応しています"
                 >
                     <form onSubmit={submit} className="space-y-4">
                         <div className="grid gap-2">
@@ -87,7 +87,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear }: Props) {
 
                 <SummaryStrip
                     items={[
-                        { label: '対応カード', value: 'セゾンカード' },
+                        { label: '形式', value: '自動判別' },
                         { label: '記帳', value: '経費 / 未払金' },
                     ]}
                 />

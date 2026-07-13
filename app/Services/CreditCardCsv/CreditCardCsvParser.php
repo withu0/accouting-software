@@ -5,8 +5,11 @@ namespace App\Services\CreditCardCsv;
 use App\Enums\CreditCardCsvFormat;
 use App\Services\BankCsv\BankCsvEncodingNormalizer;
 use App\Services\BankCsv\Support\BankCsvRowBuilder;
+use App\Services\CreditCardCsv\Adapters\GenericCreditCardCsvAdapter;
 use App\Services\CreditCardCsv\Adapters\SaisonCreditCardCsvAdapter;
 use App\Services\CreditCardCsv\Contracts\CreditCardCsvFormatAdapter;
+use App\Services\CreditCardCsv\Support\CreditCardCsvColumnMatcher;
+use App\Services\CreditCardCsv\Support\CreditCardCsvRowSupport;
 use InvalidArgumentException;
 
 class CreditCardCsvParser
@@ -18,8 +21,12 @@ class CreditCardCsvParser
         private readonly BankCsvEncodingNormalizer $encodingNormalizer,
         BankCsvRowBuilder $rowBuilder,
     ) {
+        $rowSupport = new CreditCardCsvRowSupport;
+        $columnMatcher = new CreditCardCsvColumnMatcher($rowBuilder);
+
         $this->adapters = [
             new SaisonCreditCardCsvAdapter($rowBuilder),
+            new GenericCreditCardCsvAdapter($rowBuilder, $columnMatcher, $rowSupport),
         ];
     }
 
@@ -73,7 +80,7 @@ class CreditCardCsvParser
         }
 
         throw new InvalidArgumentException(
-            '対応していないCSV形式です。セゾンカードの明細CSVをアップロードしてください。'
+            '対応していないCSV形式です。利用日・店名・金額の列を含むクレジットカード明細CSVをアップロードしてください。'
         );
     }
 }
