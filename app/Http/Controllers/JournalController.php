@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateBankImportJournalRequest;
 use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Services\BankImportService;
+use App\Services\CreditCardImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,6 +22,7 @@ class JournalController extends Controller
 
     public function __construct(
         private readonly BankImportService $bankImportService,
+        private readonly CreditCardImportService $creditCardImportService,
     ) {}
 
     public function index(Request $request): Response
@@ -92,17 +94,27 @@ class JournalController extends Controller
     {
         $company = $this->resolveCompany($request);
 
-        if ($journalEntry->company_id !== $company->id || $journalEntry->source !== JournalSource::BankCsv) {
+        if ($journalEntry->company_id !== $company->id) {
             abort(404);
         }
 
         try {
-            $this->bankImportService->deletePostedJournal($company, $journalEntry);
+            if ($journalEntry->source === JournalSource::BankCsv) {
+                $this->bankImportService->deletePostedJournal($company, $journalEntry);
+
+                return back()->with('success', '銀行CSV取込の仕訳を削除しました。');
+            }
+
+            if ($journalEntry->source === JournalSource::CreditCardCsv) {
+                $this->creditCardImportService->deletePostedJournal($company, $journalEntry);
+
+                return back()->with('success', 'クレジットカードCSV取込の仕訳を削除しました。');
+            }
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['journal' => $e->getMessage()]);
         }
 
-        return back()->with('success', '銀行CSV取込の仕訳を削除しました。');
+        abort(404);
     }
 
     public function destroyBulk(Request $request): RedirectResponse
@@ -116,22 +128,31 @@ class JournalController extends Controller
 
         $entries = $company->journalEntries()
             ->whereIn('id', $validated['ids'])
-            ->where('source', JournalSource::BankCsv)
+            ->whereIn('source', [JournalSource::BankCsv, JournalSource::CreditCardCsv])
             ->get();
 
         if ($entries->count() !== count($validated['ids'])) {
             abort(404);
         }
 
+        $bankEntries = $entries->filter(fn (JournalEntry $entry) => $entry->source === JournalSource::BankCsv);
+        $creditCardEntries = $entries->filter(fn (JournalEntry $entry) => $entry->source === JournalSource::CreditCardCsv);
+
         try {
-            $this->bankImportService->deletePostedJournals($company, $entries);
+            if ($bankEntries->isNotEmpty()) {
+                $this->bankImportService->deletePostedJournals($company, $bankEntries);
+            }
+
+            if ($creditCardEntries->isNotEmpty()) {
+                $this->creditCardImportService->deletePostedJournals($company, $creditCardEntries);
+            }
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['journal' => $e->getMessage()]);
         }
 
         $count = $entries->count();
 
-        return back()->with('success', "{$count}件の銀行CSV取込仕訳を削除しました。");
+        return back()->with('success', "{$count}件のCSV取込仕訳を削除しました。");
     }
 
     public function update(UpdateBankImportJournalRequest $request, JournalEntry $journalEntry): RedirectResponse

@@ -51,4 +51,9 @@ class JournalEntry extends Model
     {
         return $this->hasOne(BankImportRow::class);
     }
+
+    public function creditCardImportRow(): HasOne
+    {
+        return $this->hasOne(CreditCardImportRow::class);
+    }
 }

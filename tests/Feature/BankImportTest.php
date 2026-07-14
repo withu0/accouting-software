@@ -462,7 +462,7 @@ CSV;
         $this->actingAs($this->user)
             ->delete(route('journals.destroy-bulk'), ['ids' => $idsToDelete])
             ->assertRedirect()
-            ->assertSessionHas('success', '2件の銀行CSV取込仕訳を削除しました。');
+            ->assertSessionHas('success', '2件のCSV取込仕訳を削除しました。');
 
         foreach ($idsToDelete as $id) {
             $this->assertDatabaseMissing('journal_entries', ['id' => $id]);

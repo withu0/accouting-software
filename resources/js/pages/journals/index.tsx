@@ -82,6 +82,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const sourceLabels: Record<string, string> = {
     bank_csv: '銀行CSV',
+    credit_card_csv: 'カードCSV',
     advance_expense: '立替経費',
     transfer: '振替伝票',
     manual: '手動',
@@ -89,6 +90,7 @@ const sourceLabels: Record<string, string> = {
 
 const sourceBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
     bank_csv: 'default',
+    credit_card_csv: 'default',
     advance_expense: 'secondary',
     transfer: 'outline',
     manual: 'outline',
@@ -99,7 +101,7 @@ function formatAmount(amount: number): string {
 }
 
 function isDeletable(entry: JournalEntry): boolean {
-    return entry.source === 'bank_csv';
+    return entry.source === 'bank_csv' || entry.source === 'credit_card_csv';
 }
 
 export default function JournalsIndex({
@@ -214,6 +216,7 @@ export default function JournalsIndex({
                                     <SelectContent>
                                         <SelectItem value="all">すべて</SelectItem>
                                         <SelectItem value="bank_csv">銀行CSV</SelectItem>
+                                        <SelectItem value="credit_card_csv">カードCSV</SelectItem>
                                         <SelectItem value="advance_expense">立替経費</SelectItem>
                                         <SelectItem value="transfer">振替伝票</SelectItem>
                                         <SelectItem value="manual">手動</SelectItem>
@@ -336,30 +339,32 @@ export default function JournalsIndex({
                                                     {formatAmount(entry.total_amount)}
                                                 </TableCell>
                                                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                                    {entry.source === 'bank_csv' && entry.bank_csv_edit ? (
+                                                    {isDeletable(entry) ? (
                                                         <div className="flex items-center justify-end gap-1">
-                                                            <BankImportRowEditDialog
-                                                                journalId={entry.id}
-                                                                isDeposit={entry.bank_csv_edit.is_deposit}
-                                                                initialValues={{
-                                                                    transaction_date: entry.entry_date,
-                                                                    description: entry.description,
-                                                                    amount: entry.bank_csv_edit.amount,
-                                                                    account_id: entry.bank_csv_edit.account_id,
-                                                                    consumption_tax_category: entry.bank_csv_edit.consumption_tax_category,
-                                                                    has_qualified_invoice: entry.bank_csv_edit.has_qualified_invoice,
-                                                                }}
-                                                                accountGroups={accountGroups}
-                                                                expenseAccounts={expenseAccounts}
-                                                                salesTaxCategories={salesTaxCategories}
-                                                                purchaseTaxCategories={purchaseTaxCategories}
-                                                                hasActiveFiscalYear={hasActiveFiscalYear}
-                                                                trigger={
-                                                                    <Button variant="ghost" size="sm">
-                                                                        <Pencil className="size-4" />
-                                                                    </Button>
-                                                                }
-                                                            />
+                                                            {entry.source === 'bank_csv' && entry.bank_csv_edit ? (
+                                                                <BankImportRowEditDialog
+                                                                    journalId={entry.id}
+                                                                    isDeposit={entry.bank_csv_edit.is_deposit}
+                                                                    initialValues={{
+                                                                        transaction_date: entry.entry_date,
+                                                                        description: entry.description,
+                                                                        amount: entry.bank_csv_edit.amount,
+                                                                        account_id: entry.bank_csv_edit.account_id,
+                                                                        consumption_tax_category: entry.bank_csv_edit.consumption_tax_category,
+                                                                        has_qualified_invoice: entry.bank_csv_edit.has_qualified_invoice,
+                                                                    }}
+                                                                    accountGroups={accountGroups}
+                                                                    expenseAccounts={expenseAccounts}
+                                                                    salesTaxCategories={salesTaxCategories}
+                                                                    purchaseTaxCategories={purchaseTaxCategories}
+                                                                    hasActiveFiscalYear={hasActiveFiscalYear}
+                                                                    trigger={
+                                                                        <Button variant="ghost" size="sm">
+                                                                            <Pencil className="size-4" />
+                                                                        </Button>
+                                                                    }
+                                                                />
+                                                            ) : null}
                                                             <Dialog>
                                                                 <DialogTrigger asChild>
                                                                     <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">

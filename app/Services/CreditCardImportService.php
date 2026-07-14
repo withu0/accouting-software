@@ -189,6 +189,46 @@ class CreditCardImportService
         return ['confirmed' => $confirmed, 'skipped' => 0];
     }
 
+    public function deletePostedJournal(Company $company, JournalEntry $entry): void
+    {
+        if ($entry->company_id !== $company->id || $entry->source !== JournalSource::CreditCardCsv) {
+            throw new InvalidArgumentException('Only credit card CSV journal entries can be deleted through this action.');
+        }
+
+        DB::transaction(fn () => $this->deletePostedJournalEntry($entry));
+    }
+
+    /**
+     * @param  iterable<JournalEntry>  $entries
+     */
+    public function deletePostedJournals(Company $company, iterable $entries): void
+    {
+        foreach ($entries as $entry) {
+            if ($entry->company_id !== $company->id || $entry->source !== JournalSource::CreditCardCsv) {
+                throw new InvalidArgumentException('Only credit card CSV journal entries can be deleted through this action.');
+            }
+        }
+
+        DB::transaction(function () use ($entries) {
+            foreach ($entries as $entry) {
+                $this->deletePostedJournalEntry($entry);
+            }
+        });
+    }
+
+    private function deletePostedJournalEntry(JournalEntry $entry): void
+    {
+        $row = CreditCardImportRow::where('journal_entry_id', $entry->id)->first();
+
+        if ($row !== null) {
+            $creditCardImport = $row->creditCardImport;
+            $row->delete();
+            $this->updateImportStatus($creditCardImport);
+        }
+
+        $entry->delete();
+    }
+
     public function skipRow(Company $company, CreditCardImportRow $row): void
     {
         if ($row->company_id !== $company->id) {

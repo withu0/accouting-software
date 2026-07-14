@@ -8,6 +8,7 @@ use App\Models\Account;
 use App\Models\Company;
 use App\Models\CreditCardImportRow;
 use App\Models\FiscalYear;
+use App\Models\JournalEntry;
 use App\Models\User;
 use Database\Seeders\AccountSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -184,6 +185,60 @@ class CreditCardImportTest extends TestCase
         $response->assertSessionHasErrors('rows');
         $response->assertSessionHasErrors([
             'rows' => '経費科目が未選択の取引があります。すべての取引に経費科目を選択してください。',
+        ]);
+    }
+
+    public function test_delete_posted_credit_card_journal_removes_entry_and_import_row(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $row = CreditCardImportRow::where('description', '株式会社クラウドワークス')->firstOrFail();
+        $expenseAccount = Account::where('name', '外注費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ]);
+
+        $entry = JournalEntry::where('description', '株式会社クラウドワークス')->firstOrFail();
+        $entryId = $entry->id;
+        $rowId = $row->id;
+
+        $this->actingAs($this->user)
+            ->delete(route('journals.destroy', $entry))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'クレジットカードCSV取込の仕訳を削除しました。');
+
+        $this->assertDatabaseMissing('journal_entries', ['id' => $entryId]);
+        $this->assertDatabaseMissing('journal_lines', ['journal_entry_id' => $entryId]);
+        $this->assertDatabaseMissing('credit_card_import_rows', ['id' => $rowId]);
+    }
+
+    public function test_same_csv_row_can_be_reimported_after_journal_delete(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $row = CreditCardImportRow::where('description', '株式会社クラウドワークス')->firstOrFail();
+        $expenseAccount = Account::where('name', '外注費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ]);
+
+        $entry = JournalEntry::where('description', '株式会社クラウドワークス')->firstOrFail();
+        $this->actingAs($this->user)->delete(route('journals.destroy', $entry));
+
+        $response = $this->actingAs($this->user)
+            ->post(route('credit-card-import.store'), ['file' => $this->makeSaisonCsvFile()]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('importSummary', fn ($summary) => $summary['new'] === 1 && $summary['duplicates'] === 14);
+        $this->assertDatabaseHas('credit_card_import_rows', [
+            'description' => '株式会社クラウドワークス',
+            'status' => CreditCardImportRowStatus::Pending->value,
         ]);
     }
 
