@@ -53,6 +53,27 @@ class SaisonCreditCardCsvParserTest extends TestCase
         }
     }
 
+    public function test_skips_negative_amount_rows(): void
+    {
+        $csv = <<<'CSV'
+カード名称,セゾンテストカード
+お支払日,2026/07/06
+今回ご請求額,00010000
+
+利用日,ご利用店名及び商品名,利用者,支払区分,利用金額,締前入金額
+2026/05/10,AMAZON.CO.JP,本人,1回払い,5000,
+2026/05/11,前回分口座振替金額,本人,1回払い,-3000,
+2026/05/12,スターバックス,本人,1回払い,680,
+CSV;
+
+        $result = $this->parser->parse($csv);
+
+        $this->assertSame(CreditCardCsvFormat::Saison, $result['format']);
+        $this->assertCount(2, $result['rows']);
+        $this->assertSame(5000, $result['rows'][0]['amount']);
+        $this->assertSame(680, $result['rows'][1]['amount']);
+    }
+
     public function test_rejects_unrecognized_format(): void
     {
         $this->expectException(InvalidArgumentException::class);

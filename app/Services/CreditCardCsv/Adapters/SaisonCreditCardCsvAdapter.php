@@ -77,10 +77,11 @@ class SaisonCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
 
             $rowNumber++;
             $transactionDate = $this->rowBuilder->parseDate($dateValue, $rowNumber);
-            $amount = $this->rowBuilder->parseAmount($amountValue, $rowNumber, '利用金額');
+            $amount = $this->rowBuilder->parseAmount($amountValue, $rowNumber, '利用金額', allowSigned: true);
 
+            // Skip payment settlements, refunds, and other non-charge rows.
             if ($amount <= 0) {
-                throw new InvalidArgumentException("Row {$rowNumber} must have a positive amount.");
+                continue;
             }
 
             if ($description === '') {

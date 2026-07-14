@@ -54,4 +54,25 @@ CSV;
 
         $this->assertSame(CreditCardCsvFormat::Saison, $result['format']);
     }
+
+    public function test_skips_negative_and_zero_amount_rows(): void
+    {
+        $csv = <<<'CSV'
+ご利用日,ご利用内容,金額
+2026/04/06,YELL LIMITED LIABILITY COMPANY,"11,000"
+2026/03/26,前回分口座振替金額,"-361,429"
+2026/03/13,アマゾン　シーオージェーピー,"-37,875"
+2026/03/11,エルわか　東京都　豊島区,"26,800"
+2026/03/10,調整行,0
+CSV;
+
+        $result = $this->parser->parse($csv);
+
+        $this->assertSame(CreditCardCsvFormat::Generic, $result['format']);
+        $this->assertCount(2, $result['rows']);
+        $this->assertSame('YELL LIMITED LIABILITY COMPANY', $result['rows'][0]['description']);
+        $this->assertSame(11000, $result['rows'][0]['amount']);
+        $this->assertSame('エルわか　東京都　豊島区', $result['rows'][1]['description']);
+        $this->assertSame(26800, $result['rows'][1]['amount']);
+    }
 }

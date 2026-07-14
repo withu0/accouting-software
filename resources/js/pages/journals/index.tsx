@@ -90,10 +90,14 @@ const sourceLabels: Record<string, string> = {
 
 const sourceBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
     bank_csv: 'default',
-    credit_card_csv: 'default',
+    credit_card_csv: 'outline',
     advance_expense: 'secondary',
     transfer: 'outline',
     manual: 'outline',
+};
+
+const sourceBadgeClassName: Record<string, string> = {
+    credit_card_csv: 'border-transparent bg-teal-600 text-white hover:bg-teal-600/80',
 };
 
 function formatAmount(amount: number): string {
@@ -331,7 +335,10 @@ export default function JournalsIndex({
                                                     <span className="text-muted-foreground block text-[13px]">貸 {entry.credit_account_name}</span>
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">
-                                                    <Badge variant={sourceBadgeVariant[entry.source] ?? 'outline'}>
+                                                    <Badge
+                                                        variant={sourceBadgeVariant[entry.source] ?? 'outline'}
+                                                        className={sourceBadgeClassName[entry.source]}
+                                                    >
                                                         {sourceLabels[entry.source] ?? entry.source}
                                                     </Badge>
                                                 </TableCell>
