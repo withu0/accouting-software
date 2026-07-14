@@ -46,6 +46,8 @@ class CreditCardCsvColumnMatcher
     ) {}
 
     /**
+     * Match only known credit-card column header names.
+     *
      * @param  array<int, string>  $lines
      * @return array{
      *     index: int,
@@ -63,7 +65,10 @@ class CreditCardCsvColumnMatcher
                 continue;
             }
 
-            $headers = $this->rowBuilder->parseCsvLine($line);
+            $headers = array_map(
+                fn (string $header): string => $this->normalizeHeader($header),
+                $this->rowBuilder->parseCsvLine($line),
+            );
             $dateIndex = $this->findColumnIndex($headers, self::DATE_HEADERS);
             $descriptionIndex = $this->findColumnIndex($headers, self::DESCRIPTION_HEADERS);
             $amountIndex = $this->findColumnIndex($headers, self::AMOUNT_HEADERS);
@@ -102,5 +107,13 @@ class CreditCardCsvColumnMatcher
         }
 
         return null;
+    }
+
+    private function normalizeHeader(string $header): string
+    {
+        $header = preg_replace('/^\xEF\xBB\xBF/', '', $header) ?? $header;
+        $header = str_replace(["\u{3000}", "\t"], ' ', $header);
+
+        return trim($header);
     }
 }

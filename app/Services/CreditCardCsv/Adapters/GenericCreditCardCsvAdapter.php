@@ -52,6 +52,32 @@ class GenericCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
             throw new InvalidArgumentException('クレジットカード明細CSVのヘッダー行が見つかりません。');
         }
 
+        return $this->parseWithMapping($lines, $headerMapping);
+    }
+
+    /**
+     * @param  array<int, string>  $lines
+     * @param  array{
+     *     index: int,
+     *     headers: array<int, string>,
+     *     date_index: int,
+     *     description_index: int,
+     *     amount_index: int,
+     * }  $headerMapping
+     * @return array{
+     *     card_name: ?string,
+     *     payment_date: ?Carbon,
+     *     billing_amount: ?int,
+     *     rows: array<int, array{
+     *         transaction_date: Carbon,
+     *         description: string,
+     *         amount: int,
+     *         row_hash: string,
+     *     }>,
+     * }
+     */
+    public function parseWithMapping(array $lines, array $headerMapping): array
+    {
         $metadata = $this->parseMetadata($lines, $headerMapping['index']);
 
         $dateIndex = $headerMapping['date_index'];

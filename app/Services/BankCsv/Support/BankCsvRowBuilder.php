@@ -26,12 +26,28 @@ class BankCsvRowBuilder
             return ZenginDateParser::parse($value);
         }
 
-        $normalized = str_replace('/', '-', $value);
+        // US-style M/D/YYYY (common in Excel-exported card CSVs)
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $value, $matches) === 1) {
+            $month = (int) $matches[1];
+            $day = (int) $matches[2];
+            $year = (int) $matches[3];
+            if (checkdate($month, $day, $year)) {
+                return Carbon::create($year, $month, $day)->startOfDay();
+            }
+        }
+
+        // Japanese / ISO style YYYY/MM/DD or YYYY-MM-DD
+        $normalized = str_replace(['年', '月', '日', '/'], ['-', '-', '', '-'], $value);
+        $normalized = preg_replace('/-+/', '-', trim($normalized, '-')) ?? $normalized;
 
         try {
             return Carbon::parse($normalized)->startOfDay();
         } catch (\Exception) {
-            throw new InvalidArgumentException("Row {$rowNumber} has an invalid date: {$value}");
+            try {
+                return Carbon::parse($value)->startOfDay();
+            } catch (\Exception) {
+                throw new InvalidArgumentException("Row {$rowNumber} has an invalid date: {$value}");
+            }
         }
     }
 

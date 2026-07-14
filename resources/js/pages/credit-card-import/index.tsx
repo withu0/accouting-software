@@ -67,7 +67,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear }: Props) {
 
                 <FormSection
                     title="CSVファイルをアップロード"
-                    description="各種クレジットカード明細CSV（Shift_JIS / UTF-8）に対応しています"
+                    description="既知のクレジットカード明細形式は自動判別し、未知の形式はAIが列を判定します"
                 >
                     <form onSubmit={submit} className="space-y-4">
                         <div className="grid gap-2">
@@ -87,7 +87,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear }: Props) {
 
                 <SummaryStrip
                     items={[
-                        { label: '形式', value: '自動判別' },
+                        { label: '形式', value: '既知形式 → AI判定' },
                         { label: '記帳', value: '経費 / 未払金' },
                     ]}
                 />

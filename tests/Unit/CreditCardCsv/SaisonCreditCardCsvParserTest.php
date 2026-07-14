@@ -6,6 +6,7 @@ use App\Enums\CreditCardCsvFormat;
 use App\Services\BankCsv\BankCsvEncodingNormalizer;
 use App\Services\BankCsv\Support\BankCsvRowBuilder;
 use App\Services\CreditCardCsv\CreditCardCsvParser;
+use App\Services\CreditCardCsv\Support\CreditCardCsvAiColumnMapper;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -17,9 +18,13 @@ class SaisonCreditCardCsvParserTest extends TestCase
     {
         parent::setUp();
 
+        config(['services.openai.key' => null]);
+
+        $rowBuilder = new BankCsvRowBuilder;
         $this->parser = new CreditCardCsvParser(
             new BankCsvEncodingNormalizer,
-            new BankCsvRowBuilder,
+            $rowBuilder,
+            new CreditCardCsvAiColumnMapper($rowBuilder),
         );
     }
 
@@ -74,10 +79,12 @@ CSV;
         $this->assertSame(680, $result['rows'][1]['amount']);
     }
 
-    public function test_rejects_unrecognized_format(): void
+    public function test_rejects_unrecognized_format_without_openai_key(): void
     {
+        config(['services.openai.key' => null]);
+
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('対応していないCSV形式です');
+        $this->expectExceptionMessage('OPENAI_API_KEY');
 
         $this->parser->parse("foo,bar,baz\n1,2,3");
     }

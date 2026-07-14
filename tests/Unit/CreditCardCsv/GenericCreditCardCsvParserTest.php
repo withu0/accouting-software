@@ -6,6 +6,7 @@ use App\Enums\CreditCardCsvFormat;
 use App\Services\BankCsv\BankCsvEncodingNormalizer;
 use App\Services\BankCsv\Support\BankCsvRowBuilder;
 use App\Services\CreditCardCsv\CreditCardCsvParser;
+use App\Services\CreditCardCsv\Support\CreditCardCsvAiColumnMapper;
 use Tests\TestCase;
 
 class GenericCreditCardCsvParserTest extends TestCase
@@ -16,9 +17,13 @@ class GenericCreditCardCsvParserTest extends TestCase
     {
         parent::setUp();
 
+        config(['services.openai.key' => null]);
+
+        $rowBuilder = new BankCsvRowBuilder;
         $this->parser = new CreditCardCsvParser(
             new BankCsvEncodingNormalizer,
-            new BankCsvRowBuilder,
+            $rowBuilder,
+            new CreditCardCsvAiColumnMapper($rowBuilder),
         );
     }
 
