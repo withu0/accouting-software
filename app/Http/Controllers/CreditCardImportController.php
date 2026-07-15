@@ -34,8 +34,34 @@ class CreditCardImportController extends Controller
     {
         $company = $this->resolveCompany($request);
 
+        $recentImports = $company->creditCardImports()
+            ->withCount([
+                'rows as confirmed_count' => fn ($query) => $query->where('status', CreditCardImportRowStatus::Confirmed),
+                'rows as pending_count' => fn ($query) => $query->where('status', CreditCardImportRowStatus::Pending),
+                'rows as skipped_count' => fn ($query) => $query->where('status', CreditCardImportRowStatus::Skipped),
+            ])
+            ->orderByDesc('imported_at')
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get()
+            ->map(fn (CreditCardImport $import) => [
+                'id' => $import->id,
+                'original_filename' => $import->original_filename,
+                'detected_format' => $import->detected_format?->label(),
+                'card_name' => $import->card_name,
+                'status' => $import->status->value,
+                'row_count' => $import->row_count,
+                'confirmed_count' => $import->confirmed_count,
+                'pending_count' => $import->pending_count,
+                'skipped_count' => $import->skipped_count,
+                'imported_at' => $import->imported_at->format('Y-m-d H:i'),
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('credit-card-import/index', [
             'hasActiveFiscalYear' => $company->activeFiscalYear() !== null,
+            'recentImports' => $recentImports,
         ]);
     }
 
@@ -55,7 +81,7 @@ class CreditCardImportController extends Controller
                 ->withErrors(['file' => $e->getMessage()]);
         }
 
-        $redirect = redirect()
+        return redirect()
             ->route('credit-card-import.review', $result['import'])
             ->with('importSummary', [
                 'total' => $result['total'],
@@ -69,12 +95,6 @@ class CreditCardImportController extends Controller
                 'payment_date' => $result['import']->payment_date?->format('Y-m-d'),
                 'billing_amount' => $result['import']->billing_amount,
             ]);
-
-        if ($result['resumed'] ?? false) {
-            $redirect->with('success', '未完了の取込があります。記帳を続けてください。');
-        }
-
-        return $redirect;
     }
 
     public function review(Request $request, CreditCardImport $import): Response

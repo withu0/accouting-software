@@ -114,13 +114,13 @@ class CreditCardImportTest extends TestCase
         $this->assertEquals(CreditCardImportRowStatus::Confirmed, $row->status);
     }
 
-    public function test_reimport_skips_duplicate_rows(): void
+    public function test_reimport_creates_all_rows_again(): void
     {
         $file = $this->makeSaisonCsvFile();
         $firstResponse = $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
 
         preg_match('/credit-card-import\/(\d+)\/review/', $firstResponse->headers->get('Location'), $matches);
-        $importId = (int) $matches[1];
+        $firstImportId = (int) $matches[1];
 
         $row = CreditCardImportRow::where('description', '株式会社クラウドワークス')->firstOrFail();
         $expenseAccount = Account::where('name', '外注費')->firstOrFail();
@@ -135,10 +135,13 @@ class CreditCardImportTest extends TestCase
         $response = $this->actingAs($this->user)
             ->post(route('credit-card-import.store'), ['file' => $file2]);
 
-        $response->assertRedirect(route('credit-card-import.review', $importId));
-        $response->assertSessionHas('importSummary', fn ($summary) => $summary['duplicates'] === 15);
+        preg_match('/credit-card-import\/(\d+)\/review/', $response->headers->get('Location'), $matches);
+        $secondImportId = (int) $matches[1];
+
+        $this->assertNotSame($firstImportId, $secondImportId);
+        $response->assertSessionHas('importSummary', fn ($summary) => $summary['new'] === 15 && $summary['duplicates'] === 0);
         $this->assertDatabaseCount('journal_entries', 1);
-        $this->assertEquals(14, CreditCardImportRow::where('credit_card_import_id', $importId)->where('status', CreditCardImportRowStatus::Pending)->count());
+        $this->assertEquals(15, CreditCardImportRow::where('credit_card_import_id', $secondImportId)->where('status', CreditCardImportRowStatus::Pending)->count());
     }
 
     public function test_skip_row(): void
@@ -235,11 +238,28 @@ class CreditCardImportTest extends TestCase
             ->post(route('credit-card-import.store'), ['file' => $this->makeSaisonCsvFile()]);
 
         $response->assertRedirect();
-        $response->assertSessionHas('importSummary', fn ($summary) => $summary['new'] === 1 && $summary['duplicates'] === 14);
+        $response->assertSessionHas('importSummary', fn ($summary) => $summary['new'] === 15 && $summary['duplicates'] === 0);
         $this->assertDatabaseHas('credit_card_import_rows', [
             'description' => '株式会社クラウドワークス',
             'status' => CreditCardImportRowStatus::Pending->value,
         ]);
+    }
+
+    public function test_index_shows_latest_five_imports(): void
+    {
+        for ($i = 1; $i <= 6; $i++) {
+            $this->actingAs($this->user)->post(route('credit-card-import.store'), [
+                'file' => $this->makeSaisonCsvFile(),
+            ]);
+        }
+
+        $this->actingAs($this->user)
+            ->get(route('credit-card-import'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('credit-card-import/index')
+                ->has('recentImports', 5)
+            );
     }
 
     private function makeSaisonCsvFile(): UploadedFile

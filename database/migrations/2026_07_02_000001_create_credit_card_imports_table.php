@@ -35,8 +35,6 @@ return new class extends Migration
             $table->foreignId('journal_entry_id')->nullable()->constrained();
             $table->string('status');
             $table->timestamps();
-
-            $table->unique(['company_id', 'row_hash']);
         });
     }
 

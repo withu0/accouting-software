@@ -50,10 +50,8 @@ class CreditCardImportService
         $detectedFormat = $parseResult['format'];
 
         $newCount = 0;
-        $duplicateCount = 0;
         $outOfPeriodCount = 0;
         $rowsToCreate = [];
-        $resumableImportIds = [];
 
         foreach ($parsedRows as $row) {
             $transactionDate = $row['transaction_date'];
@@ -64,46 +62,14 @@ class CreditCardImportService
                 continue;
             }
 
-            $existingRow = CreditCardImportRow::where('company_id', $company->id)
-                ->where('row_hash', $row['row_hash'])
-                ->first();
-
-            if ($existingRow !== null) {
-                $duplicateCount++;
-
-                if ($existingRow->status === CreditCardImportRowStatus::Pending) {
-                    $resumableImportIds[$existingRow->credit_card_import_id] = ($resumableImportIds[$existingRow->credit_card_import_id] ?? 0) + 1;
-                }
-
-                continue;
-            }
-
             $rowsToCreate[] = ['row' => $row];
             $newCount++;
         }
 
         if ($newCount === 0) {
-            $importableRowCount = count($parsedRows) - $outOfPeriodCount;
-
-            if ($importableRowCount > 0 && $duplicateCount === $importableRowCount) {
-                $resumableImportId = $this->resolveResumableImportId($resumableImportIds);
-
-                if ($resumableImportId !== null) {
-                    return [
-                        'import' => CreditCardImport::findOrFail($resumableImportId),
-                        'total' => count($parsedRows),
-                        'new' => 0,
-                        'duplicates' => $duplicateCount,
-                        'out_of_period' => $outOfPeriodCount,
-                        'resumed' => true,
-                    ];
-                }
-            }
-
             throw new InvalidArgumentException($this->buildImportRejectionMessage(
                 $fiscalYear->start_date->format('Y-m-d'),
                 $fiscalYear->end_date->format('Y-m-d'),
-                $duplicateCount,
                 $outOfPeriodCount,
             ));
         }
@@ -153,7 +119,7 @@ class CreditCardImportService
             'import' => $creditCardImport,
             'total' => count($parsedRows),
             'new' => $newCount,
-            'duplicates' => $duplicateCount,
+            'duplicates' => 0,
             'out_of_period' => $outOfPeriodCount,
             'detected_format' => $detectedFormat,
         ];
@@ -356,7 +322,7 @@ class CreditCardImportService
      */
     private function postRow(Company $company, CreditCardImportRow $row, int $expenseAccountId, array $options = []): JournalEntry
     {
-        $idempotencyKey = "credit_card_csv:{$row->row_hash}";
+        $idempotencyKey = "credit_card_csv:row:{$row->id}";
 
         $existingEntry = JournalEntry::where('company_id', $company->id)
             ->where('idempotency_key', $idempotencyKey)
@@ -459,36 +425,13 @@ class CreditCardImportService
     private function buildImportRejectionMessage(
         string $fiscalYearStart,
         string $fiscalYearEnd,
-        int $duplicateCount,
         int $outOfPeriodCount,
     ): string {
-        if ($duplicateCount > 0 && $outOfPeriodCount === 0) {
-            return 'すべての取引は既に取込済みです。同じCSVを再度アップロードすることはできません。';
-        }
-
-        if ($outOfPeriodCount > 0 && $duplicateCount === 0) {
+        if ($outOfPeriodCount > 0) {
             return "CSVの取引日が会計期間（{$fiscalYearStart} 〜 {$fiscalYearEnd}）外のため取込できません。会計期間設定を確認してください。";
         }
 
-        if ($duplicateCount > 0 && $outOfPeriodCount > 0) {
-            return "取込可能な取引がありません。{$duplicateCount}件は既に取込済み、{$outOfPeriodCount}件は会計期間（{$fiscalYearStart} 〜 {$fiscalYearEnd}）外です。";
-        }
-
         return '取込可能な取引がありません。';
-    }
-
-    /**
-     * @param  array<int, int>  $resumableImportIds
-     */
-    private function resolveResumableImportId(array $resumableImportIds): ?int
-    {
-        if ($resumableImportIds === []) {
-            return null;
-        }
-
-        arsort($resumableImportIds);
-
-        return array_key_first($resumableImportIds);
     }
 
     private function updateImportStatus(CreditCardImport $creditCardImport): void
