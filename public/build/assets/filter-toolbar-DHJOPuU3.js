@@ -1,0 +1,1 @@
+import{j as s}from"./app-DSAZyA4a.js";import{c as a}from"./app-logo-icon-Bb6uvkJk.js";function c({children:r,className:t,sticky:e=!0}){return s.jsx("div",{className:a("surface-card flex flex-wrap items-center gap-2 px-4 py-3",e&&"sticky top-14 z-10",t),children:r})}export{c as F};
