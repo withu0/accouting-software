@@ -86,6 +86,8 @@ class GenericCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
 
         $rows = [];
         $rowNumber = 0;
+        /** @var array<string, int> $occurrenceCounts */
+        $occurrenceCounts = [];
 
         for ($i = $headerMapping['index'] + 1; $i < count($lines); $i++) {
             $line = trim($lines[$i]);
@@ -115,14 +117,20 @@ class GenericCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
                 throw new InvalidArgumentException("Row {$rowNumber} is missing merchant name.");
             }
 
+            $dateKey = $transactionDate->format('Y-m-d');
+            $occurrenceKey = "{$dateKey}|{$description}|{$amount}";
+            $occurrence = $occurrenceCounts[$occurrenceKey] ?? 0;
+            $occurrenceCounts[$occurrenceKey] = $occurrence + 1;
+
             $rows[] = [
                 'transaction_date' => $transactionDate,
                 'description' => $description,
                 'amount' => $amount,
                 'row_hash' => $this->rowSupport->computeRowHash(
-                    $transactionDate->format('Y-m-d'),
+                    $dateKey,
                     $description,
                     $amount,
+                    $occurrence,
                 ),
             ];
         }

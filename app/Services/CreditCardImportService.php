@@ -108,34 +108,46 @@ class CreditCardImportService
             ));
         }
 
-        $creditCardImport = CreditCardImport::create([
-            'company_id' => $company->id,
-            'fiscal_year_id' => $fiscalYear->id,
-            'original_filename' => $file->getClientOriginalName(),
-            'detected_format' => $detectedFormat->value,
-            'card_name' => $parseResult['card_name'],
-            'payment_date' => $parseResult['payment_date'],
-            'billing_amount' => $parseResult['billing_amount'],
-            'status' => CreditCardImportStatus::Pending,
-            'row_count' => $newCount,
-            'imported_at' => now(),
-        ]);
-
-        foreach ($rowsToCreate as $item) {
-            $row = $item['row'];
-            $suggestedAccount = $this->ruleMatcher->suggestAccount($company, $row['description']);
-
-            CreditCardImportRow::create([
-                'credit_card_import_id' => $creditCardImport->id,
+        $creditCardImport = DB::transaction(function () use (
+            $company,
+            $fiscalYear,
+            $file,
+            $detectedFormat,
+            $parseResult,
+            $newCount,
+            $rowsToCreate,
+        ) {
+            $creditCardImport = CreditCardImport::create([
                 'company_id' => $company->id,
-                'row_hash' => $row['row_hash'],
-                'transaction_date' => $row['transaction_date'],
-                'description' => $row['description'],
-                'amount' => $row['amount'],
-                'suggested_account_id' => $suggestedAccount?->id,
-                'status' => CreditCardImportRowStatus::Pending,
+                'fiscal_year_id' => $fiscalYear->id,
+                'original_filename' => $file->getClientOriginalName(),
+                'detected_format' => $detectedFormat->value,
+                'card_name' => $parseResult['card_name'],
+                'payment_date' => $parseResult['payment_date'],
+                'billing_amount' => $parseResult['billing_amount'],
+                'status' => CreditCardImportStatus::Pending,
+                'row_count' => $newCount,
+                'imported_at' => now(),
             ]);
-        }
+
+            foreach ($rowsToCreate as $item) {
+                $row = $item['row'];
+                $suggestedAccount = $this->ruleMatcher->suggestAccount($company, $row['description']);
+
+                CreditCardImportRow::create([
+                    'credit_card_import_id' => $creditCardImport->id,
+                    'company_id' => $company->id,
+                    'row_hash' => $row['row_hash'],
+                    'transaction_date' => $row['transaction_date'],
+                    'description' => $row['description'],
+                    'amount' => $row['amount'],
+                    'suggested_account_id' => $suggestedAccount?->id,
+                    'status' => CreditCardImportRowStatus::Pending,
+                ]);
+            }
+
+            return $creditCardImport;
+        });
 
         return [
             'import' => $creditCardImport,

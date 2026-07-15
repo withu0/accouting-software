@@ -23,8 +23,15 @@ class CreditCardCsvRowSupport
         return false;
     }
 
-    public function computeRowHash(string $date, string $description, int $amount): string
+    public function computeRowHash(string $date, string $description, int $amount, int $occurrence = 0): string
     {
-        return hash('sha256', "{$date}|{$description}|{$amount}");
+        // Occurrence lets the same merchant/amount on the same day import more than once
+        // (e.g. two LINE charges). Keep occurrence 0 compatible with existing hashes.
+        $payload = "{$date}|{$description}|{$amount}";
+        if ($occurrence > 0) {
+            $payload .= "|{$occurrence}";
+        }
+
+        return hash('sha256', $payload);
     }
 }

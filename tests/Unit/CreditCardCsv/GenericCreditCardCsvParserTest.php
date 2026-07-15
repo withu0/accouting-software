@@ -80,4 +80,21 @@ CSV;
         $this->assertSame('エルわか　東京都　豊島区', $result['rows'][1]['description']);
         $this->assertSame(26800, $result['rows'][1]['amount']);
     }
+
+    public function test_same_day_identical_charges_get_distinct_hashes(): void
+    {
+        $csv = <<<'CSV'
+ご利用日,ご利用内容,金額
+2026/02/01,ＬＩＮＥ公式アカウント　東京都　新宿区,"5,500"
+2026/02/01,ＬＩＮＥ公式アカウント　東京都　新宿区,"5,500"
+2026/02/03,CANVA,1180
+CSV;
+
+        $result = $this->parser->parse($csv);
+
+        $this->assertCount(3, $result['rows']);
+        $this->assertSame(5500, $result['rows'][0]['amount']);
+        $this->assertSame(5500, $result['rows'][1]['amount']);
+        $this->assertNotSame($result['rows'][0]['row_hash'], $result['rows'][1]['row_hash']);
+    }
 }

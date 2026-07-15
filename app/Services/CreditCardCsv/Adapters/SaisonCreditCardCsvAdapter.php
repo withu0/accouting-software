@@ -5,6 +5,7 @@ namespace App\Services\CreditCardCsv\Adapters;
 use App\Enums\CreditCardCsvFormat;
 use App\Services\BankCsv\Support\BankCsvRowBuilder;
 use App\Services\CreditCardCsv\Contracts\CreditCardCsvFormatAdapter;
+use App\Services\CreditCardCsv\Support\CreditCardCsvRowSupport;
 use Carbon\Carbon;
 use InvalidArgumentException;
 
@@ -14,6 +15,7 @@ class SaisonCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
 
     public function __construct(
         private readonly BankCsvRowBuilder $rowBuilder,
+        private readonly CreditCardCsvRowSupport $rowSupport = new CreditCardCsvRowSupport,
     ) {}
 
     /**
@@ -59,6 +61,8 @@ class SaisonCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
 
         $rows = [];
         $rowNumber = 0;
+        /** @var array<string, int> $occurrenceCounts */
+        $occurrenceCounts = [];
 
         for ($i = $headerInfo['index'] + 1; $i < count($lines); $i++) {
             $line = trim($lines[$i]);
@@ -88,14 +92,20 @@ class SaisonCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
                 throw new InvalidArgumentException("Row {$rowNumber} is missing merchant name.");
             }
 
+            $dateKey = $transactionDate->format('Y-m-d');
+            $occurrenceKey = "{$dateKey}|{$description}|{$amount}";
+            $occurrence = $occurrenceCounts[$occurrenceKey] ?? 0;
+            $occurrenceCounts[$occurrenceKey] = $occurrence + 1;
+
             $rows[] = [
                 'transaction_date' => $transactionDate,
                 'description' => $description,
                 'amount' => $amount,
-                'row_hash' => $this->computeRowHash(
-                    $transactionDate->format('Y-m-d'),
+                'row_hash' => $this->rowSupport->computeRowHash(
+                    $dateKey,
                     $description,
                     $amount,
+                    $occurrence,
                 ),
             ];
         }
@@ -166,10 +176,5 @@ class SaisonCreditCardCsvAdapter implements CreditCardCsvFormatAdapter
         }
 
         return false;
-    }
-
-    public function computeRowHash(string $date, string $description, int $amount): string
-    {
-        return hash('sha256', "{$date}|{$description}|{$amount}");
     }
 }

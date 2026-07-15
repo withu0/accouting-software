@@ -30,7 +30,7 @@ class CreditCardCsvParser
 
         $this->genericAdapter = new GenericCreditCardCsvAdapter($rowBuilder, $columnMatcher, $rowSupport);
         $this->adapters = [
-            new SaisonCreditCardCsvAdapter($rowBuilder),
+            new SaisonCreditCardCsvAdapter($rowBuilder, $rowSupport),
             $this->genericAdapter,
         ];
     }
