@@ -1,4 +1,4 @@
-import ConsumptionTaxFields, { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import ConsumptionTaxFields, { type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -46,7 +46,6 @@ export default function BankImportRowEditDialog({
     isDeposit,
     initialValues,
     accountGroups,
-    expenseAccounts = [],
     salesTaxCategories,
     purchaseTaxCategories,
     hasActiveFiscalYear,
@@ -66,7 +65,6 @@ export default function BankImportRowEditDialog({
     const [hasQualifiedInvoice, setHasQualifiedInvoice] = useState(initialValues.has_qualified_invoice);
 
     const categoryOptions = isDeposit ? salesTaxCategories : purchaseTaxCategories;
-    const defaultCategory = isDeposit ? 'taxable_sales_10' : 'taxable_purchase_10';
 
     useEffect(() => {
         if (open) {
@@ -179,14 +177,7 @@ export default function BankImportRowEditDialog({
                         <Label htmlFor={`edit-account-${rowId ?? journalId}`}>勘定科目</Label>
                         <Select
                             value={accountId}
-                            onValueChange={(value) => {
-                                setAccountId(value);
-                                if (!isDeposit) {
-                                    setConsumptionTaxCategory(
-                                        defaultCategoryForAccount(Number(value), expenseAccounts, defaultCategory),
-                                    );
-                                }
-                            }}
+                            onValueChange={setAccountId}
                             disabled={!hasActiveFiscalYear || processing}
                         >
                             <SelectTrigger id={`edit-account-${rowId ?? journalId}`}>

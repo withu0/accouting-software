@@ -112,10 +112,6 @@ class CreditCardImportController extends Controller
                 $suggestedAccountId = $suggestedAccount?->id ?? $row->suggested_account_id;
                 $accountId = $suggestedAccountId;
 
-                $defaultCategory = $accountId !== null
-                    ? (Account::find($accountId)?->default_consumption_tax_category?->value ?? ConsumptionTaxCategory::TaxablePurchase10->value)
-                    : ConsumptionTaxCategory::TaxablePurchase10->value;
-
                 return [
                     'id' => $row->id,
                     'transaction_date' => $row->transaction_date->format('Y-m-d'),
@@ -123,7 +119,7 @@ class CreditCardImportController extends Controller
                     'amount' => $row->amount,
                     'suggested_account_id' => $suggestedAccountId,
                     'account_id' => $accountId,
-                    'consumption_tax_category' => $defaultCategory,
+                    'consumption_tax_category' => null,
                     'has_qualified_invoice' => true,
                 ];
             });

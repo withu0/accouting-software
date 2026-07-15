@@ -96,12 +96,6 @@ class BankImportController extends Controller
                     ? Account::findByName('売上高')->id
                     : $suggestedAccountId;
 
-                $defaultCategory = $isDeposit
-                    ? ConsumptionTaxCategory::TaxableSales10->value
-                    : ($accountId !== null
-                        ? (Account::find($accountId)?->default_consumption_tax_category?->value ?? ConsumptionTaxCategory::TaxablePurchase10->value)
-                        : ConsumptionTaxCategory::TaxablePurchase10->value);
-
                 return [
                     'id' => $row->id,
                     'transaction_date' => $row->transaction_date->format('Y-m-d'),
@@ -112,7 +106,7 @@ class BankImportController extends Controller
                     'is_deposit' => $isDeposit,
                     'suggested_account_id' => $suggestedAccountId,
                     'account_id' => $accountId,
-                    'consumption_tax_category' => $defaultCategory,
+                    'consumption_tax_category' => null,
                     'has_qualified_invoice' => true,
                 ];
             });

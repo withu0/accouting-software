@@ -78,7 +78,7 @@ class BankImportTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id]],
+                'rows' => [array_merge(['row_id' => $row->id], $this->salesTaxPayload())],
             ])
             ->assertRedirect();
 
@@ -128,7 +128,7 @@ class BankImportTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ])
             ->assertRedirect();
 
@@ -169,7 +169,7 @@ class BankImportTest extends TestCase
         $row = BankImportRow::where('description', '振込 カ）ABC商事')->firstOrFail();
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id]],
+                'rows' => [array_merge(['row_id' => $row->id], $this->salesTaxPayload())],
             ]);
 
         $this->assertDatabaseCount('journal_entries', 1);
@@ -201,7 +201,23 @@ class BankImportTest extends TestCase
                 ->component('bank-import/review')
                 ->where('rows.1.description', 'Amazon.co.jp')
                 ->where('rows.1.suggested_account_id', $expenseAccount->id)
+                ->where('rows.1.consumption_tax_category', null)
             );
+    }
+
+    public function test_confirm_without_tax_category_fails_validation(): void
+    {
+        $file = $this->makeCsvFile();
+        $this->actingAs($this->user)->post(route('bank-import.store'), ['file' => $file]);
+
+        $row = BankImportRow::where('description', 'Amazon.co.jp')->firstOrFail();
+        $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('bank-import.confirm', $row->bank_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ])
+            ->assertSessionHasErrors('rows.0.consumption_tax_category');
     }
 
     public function test_confirm_withdrawal_learns_rule_for_future_import(): void
@@ -220,7 +236,7 @@ CSV;
         $expenseAccount = Account::where('name', '外注費')->firstOrFail();
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ]);
 
         $this->assertDatabaseHas('description_rules', [
@@ -255,7 +271,7 @@ CSV;
 
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $overrideAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $overrideAccount->id], $this->purchaseTaxPayload())],
             ]);
 
         $csv = <<<'CSV'
@@ -296,12 +312,19 @@ CSV;
         $rows = BankImportRow::where('bank_import_id', $import->id)->get();
 
         foreach ($rows as $row) {
-            $payload = ['rows' => [['row_id' => $row->id]]];
-            if ($row->withdrawal_amount > 0) {
-                $payload['rows'][0]['account_id'] = Account::where('name', '消耗品費')->firstOrFail()->id;
-            }
+            $rowPayload = array_merge(
+                ['row_id' => $row->id],
+                $row->withdrawal_amount > 0
+                    ? array_merge(
+                        ['account_id' => Account::where('name', '消耗品費')->firstOrFail()->id],
+                        $this->purchaseTaxPayload(),
+                    )
+                    : $this->salesTaxPayload(),
+            );
 
-            $this->actingAs($this->user)->post(route('bank-import.confirm', $import->id), $payload);
+            $this->actingAs($this->user)->post(route('bank-import.confirm', $import->id), [
+                'rows' => [$rowPayload],
+            ]);
         }
 
         $response = $this->actingAs($this->user)
@@ -349,7 +372,7 @@ CSV;
         $row = BankImportRow::where('description', '振込 カ）ABC商事')->firstOrFail();
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id]],
+                'rows' => [array_merge(['row_id' => $row->id], $this->salesTaxPayload())],
             ]);
 
         $entry = JournalEntry::where('description', '振込 カ）ABC商事')->firstOrFail();
@@ -377,7 +400,7 @@ CSV;
         $row = BankImportRow::where('description', '振込 カ）ABC商事')->firstOrFail();
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id]],
+                'rows' => [array_merge(['row_id' => $row->id], $this->salesTaxPayload())],
             ]);
 
         $entry = JournalEntry::where('description', '振込 カ）ABC商事')->firstOrFail();
@@ -448,10 +471,13 @@ CSV;
         $rows = BankImportRow::orderBy('id')->get();
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $rows->first()->bank_import_id), [
-                'rows' => $rows->map(fn ($row) => [
-                    'row_id' => $row->id,
-                    ...($row->withdrawal_amount > 0 ? ['account_id' => $expenseAccount->id] : []),
-                ])->all(),
+                'rows' => $rows->map(fn ($row) => array_merge(
+                    [
+                        'row_id' => $row->id,
+                        ...($row->withdrawal_amount > 0 ? ['account_id' => $expenseAccount->id] : []),
+                    ],
+                    $row->withdrawal_amount > 0 ? $this->purchaseTaxPayload() : $this->salesTaxPayload(),
+                ))->all(),
             ]);
 
         $entries = JournalEntry::where('source', JournalSource::BankCsv)->orderBy('id')->get();
@@ -534,7 +560,7 @@ CSV;
 
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ]);
 
         $entry = JournalEntry::where('description', 'Amazon.co.jp')->firstOrFail();
@@ -595,7 +621,7 @@ CSV;
         $row = BankImportRow::where('description', '振込 カ）ABC商事')->firstOrFail();
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id]],
+                'rows' => [array_merge(['row_id' => $row->id], $this->salesTaxPayload())],
             ]);
 
         $entry = JournalEntry::where('description', '振込 カ）ABC商事')->firstOrFail();
@@ -709,7 +735,7 @@ CSV;
         $depositRow = $rows->firstWhere('description', '振込 カ）ABC商事');
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $import->id), [
-                'rows' => [['row_id' => $depositRow->id]],
+                'rows' => [array_merge(['row_id' => $depositRow->id], $this->salesTaxPayload())],
             ]);
 
         $this->actingAs($this->user)
@@ -742,7 +768,7 @@ CSV;
 
         $this->actingAs($this->user)
             ->post(route('bank-import.confirm', $row->bank_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => Account::where('name', '消耗品費')->firstOrFail()->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => Account::where('name', '消耗品費')->firstOrFail()->id], $this->purchaseTaxPayload())],
             ]);
 
         $this->actingAs($this->user)

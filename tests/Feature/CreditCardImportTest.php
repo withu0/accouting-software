@@ -62,6 +62,7 @@ class CreditCardImportTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('credit-card-import/review')
                 ->has('rows', 15)
+                ->where('rows.0.consumption_tax_category', null)
             );
     }
 
@@ -75,7 +76,7 @@ class CreditCardImportTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ])
             ->assertRedirect();
 
@@ -126,7 +127,7 @@ class CreditCardImportTest extends TestCase
         $expenseAccount = Account::where('name', '外注費')->firstOrFail();
         $this->actingAs($this->user)
             ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ]);
 
         $this->assertDatabaseCount('journal_entries', 1);
@@ -182,13 +183,28 @@ class CreditCardImportTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
-                'rows' => [['row_id' => $row->id]],
+                'rows' => [array_merge(['row_id' => $row->id], $this->purchaseTaxPayload())],
             ]);
 
         $response->assertSessionHasErrors('rows');
         $response->assertSessionHasErrors([
             'rows' => '経費科目が未選択の取引があります。すべての取引に経費科目を選択してください。',
         ]);
+    }
+
+    public function test_confirm_without_tax_category_fails_validation(): void
+    {
+        $file = $this->makeSaisonCsvFile();
+        $this->actingAs($this->user)->post(route('credit-card-import.store'), ['file' => $file]);
+
+        $row = CreditCardImportRow::firstOrFail();
+        $expenseAccount = Account::expenseAccounts()->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
+                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+            ])
+            ->assertSessionHasErrors('rows.0.consumption_tax_category');
     }
 
     public function test_delete_posted_credit_card_journal_removes_entry_and_import_row(): void
@@ -201,7 +217,7 @@ class CreditCardImportTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ]);
 
         $entry = JournalEntry::where('description', '株式会社クラウドワークス')->firstOrFail();
@@ -228,7 +244,7 @@ class CreditCardImportTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('credit-card-import.confirm', $row->credit_card_import_id), [
-                'rows' => [['row_id' => $row->id, 'account_id' => $expenseAccount->id]],
+                'rows' => [array_merge(['row_id' => $row->id, 'account_id' => $expenseAccount->id], $this->purchaseTaxPayload())],
             ]);
 
         $entry = JournalEntry::where('description', '株式会社クラウドワークス')->firstOrFail();

@@ -1,4 +1,4 @@
-import ConsumptionTaxFields, { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import ConsumptionTaxFields, { type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -41,7 +41,6 @@ export default function CreditCardImportRowEditDialog({
     rowId,
     initialValues,
     accountGroups,
-    expenseAccounts = [],
     purchaseTaxCategories,
     hasActiveFiscalYear,
     trigger,
@@ -157,12 +156,7 @@ export default function CreditCardImportRowEditDialog({
                         <Label htmlFor={`edit-account-${rowId}`}>経費科目</Label>
                         <Select
                             value={accountId}
-                            onValueChange={(value) => {
-                                setAccountId(value);
-                                setConsumptionTaxCategory(
-                                    defaultCategoryForAccount(Number(value), expenseAccounts, 'taxable_purchase_10'),
-                                );
-                            }}
+                            onValueChange={setAccountId}
                             disabled={!hasActiveFiscalYear || processing}
                         >
                             <SelectTrigger id={`edit-account-${rowId}`}>

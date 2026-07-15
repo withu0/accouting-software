@@ -281,7 +281,7 @@ class CreditCardImportService
         DB::transaction(function () use ($company, $row, $rowUpdates, $entry, $entryDate, $data, $lines, $accountId, $previousAccountId) {
             $row->update($rowUpdates);
 
-            $taxCategory = $this->resolveBaseCategory($data, $accountId);
+            $taxCategory = $this->resolveBaseCategory($data);
             $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($taxCategory, $data);
 
             $this->journalService->updateBalancedEntry(
@@ -339,7 +339,7 @@ class CreditCardImportService
 
         $payableAccount = Account::findByName('未払金');
         $entryDate = Carbon::parse($row->transaction_date);
-        $baseCategory = $this->resolveBaseCategory($options, $expenseAccountId);
+        $baseCategory = $this->resolveBaseCategory($options);
         $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
             $baseCategory,
@@ -373,7 +373,7 @@ class CreditCardImportService
     private function buildExpenseJournalLines(Company $company, Carbon $entryDate, int $amount, int $expenseAccountId, array $options): array
     {
         $payableAccount = Account::findByName('未払金');
-        $baseCategory = $this->resolveBaseCategory($options, $expenseAccountId);
+        $baseCategory = $this->resolveBaseCategory($options);
         $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
             $baseCategory,
@@ -393,19 +393,13 @@ class CreditCardImportService
     /**
      * @param  array{consumption_tax_category?: string}  $options
      */
-    private function resolveBaseCategory(array $options, int $accountId): ConsumptionTaxCategory
+    private function resolveBaseCategory(array $options): ConsumptionTaxCategory
     {
-        if (! empty($options['consumption_tax_category'])) {
-            return ConsumptionTaxCategory::from($options['consumption_tax_category']);
+        if (empty($options['consumption_tax_category'])) {
+            throw new InvalidArgumentException('税区分を選択してください。');
         }
 
-        $account = Account::findOrFail($accountId);
-
-        if ($account->default_consumption_tax_category !== null) {
-            return $account->default_consumption_tax_category;
-        }
-
-        return ConsumptionTaxCategory::TaxablePurchase10;
+        return ConsumptionTaxCategory::from($options['consumption_tax_category']);
     }
 
     /**

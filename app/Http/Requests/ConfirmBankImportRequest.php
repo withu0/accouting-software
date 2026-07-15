@@ -18,12 +18,14 @@ class ConfirmBankImportRequest extends FormRequest
      */
     public function rules(): array
     {
+        $taxRules = $this->consumptionTaxRules();
+
         return [
             'rows' => ['required', 'array', 'min:1'],
             'rows.*.row_id' => ['required', 'integer'],
             'rows.*.account_id' => ['nullable', 'integer', 'exists:accounts,id'],
-            'rows.*.consumption_tax_category' => ['nullable', 'string'],
-            'rows.*.has_qualified_invoice' => ['nullable', 'boolean'],
+            'rows.*.consumption_tax_category' => $taxRules['consumption_tax_category'],
+            'rows.*.has_qualified_invoice' => $taxRules['has_qualified_invoice'],
         ];
     }
 
@@ -71,6 +73,7 @@ class ConfirmBankImportRequest extends FormRequest
         return [
             'rows.required' => '記帳する取引を選択してください。',
             'rows.min' => '記帳する取引を選択してください。',
+            'rows.*.consumption_tax_category.required' => '税区分を選択してください。',
         ];
     }
 }

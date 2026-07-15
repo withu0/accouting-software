@@ -1,4 +1,4 @@
-import { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import { DataTable, DataTableHeader } from '@/components/data-table';
 import { FlashAlert } from '@/components/flash-alert';
 import { PageContainer } from '@/components/page-container';
@@ -37,7 +37,7 @@ interface ImportRow {
     is_deposit: boolean;
     suggested_account_id?: number | null;
     account_id?: number | null;
-    consumption_tax_category: string;
+    consumption_tax_category: string | null;
     has_qualified_invoice: boolean;
 }
 
@@ -86,7 +86,9 @@ function initialAccountSelections(rows: ImportRow[]): Record<number, string> {
 function initialTaxCategories(rows: ImportRow[]): Record<number, string> {
     const categories: Record<number, string> = {};
     for (const row of rows) {
-        categories[row.id] = row.consumption_tax_category;
+        if (row.consumption_tax_category) {
+            categories[row.id] = row.consumption_tax_category;
+        }
     }
     return categories;
 }
@@ -130,6 +132,10 @@ export default function BankImportReview({
         );
     }, [rows, selectedIds, accountSelections]);
 
+    const missingTaxRowIds = useMemo(() => {
+        return new Set(rows.filter((row) => selectedIds.has(row.id) && !taxCategories[row.id]).map((row) => row.id));
+    }, [rows, selectedIds, taxCategories]);
+
     const toggleRow = (id: number, checked: boolean) => {
         setSelectedIds((prev) => {
             const next = new Set(prev);
@@ -148,10 +154,6 @@ export default function BankImportReview({
 
     const handleAccountChange = (rowId: number, accountId: string) => {
         setAccountSelections((prev) => ({ ...prev, [rowId]: accountId }));
-        setTaxCategories((prev) => ({
-            ...prev,
-            [rowId]: defaultCategoryForAccount(Number(accountId), expenseAccounts, 'taxable_purchase_10'),
-        }));
     };
 
     const handleSkip = (rowId: number) => {
@@ -165,7 +167,7 @@ export default function BankImportReview({
             .filter((row) => selectedIds.has(row.id))
             .map((row) => ({
                 row_id: row.id,
-                consumption_tax_category: taxCategories[row.id],
+                consumption_tax_category: taxCategories[row.id] || null,
                 has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
                 ...(row.is_deposit ? {} : { account_id: Number(accountSelections[row.id]) }),
             }));
@@ -185,10 +187,10 @@ export default function BankImportReview({
         return rows.filter((row) => {
             if (rowFilter === 'deposit') return row.is_deposit;
             if (rowFilter === 'withdrawal') return !row.is_deposit;
-            if (rowFilter === 'missing') return missingAccountRowIds.has(row.id);
+            if (rowFilter === 'missing') return missingAccountRowIds.has(row.id) || missingTaxRowIds.has(row.id);
             return true;
         });
-    }, [rows, rowFilter, missingAccountRowIds]);
+    }, [rows, rowFilter, missingAccountRowIds, missingTaxRowIds]);
 
     const allSelected = rows.length > 0 && selectedIds.size === rows.length;
 
@@ -221,6 +223,11 @@ export default function BankImportReview({
                             value: `${missingAccountRowIds.size}件`,
                             variant: missingAccountRowIds.size > 0 ? 'warning' : 'default',
                         },
+                        {
+                            label: '税区分未選択',
+                            value: `${missingTaxRowIds.size}件`,
+                            variant: missingTaxRowIds.size > 0 ? 'warning' : 'default',
+                        },
                         ...(importSummary?.detected_format
                             ? [{ label: '判別形式', value: importSummary.detected_format }]
                             : []),
@@ -249,7 +256,7 @@ export default function BankImportReview({
                                     ['all', 'すべて'],
                                     ['deposit', '入金のみ'],
                                     ['withdrawal', '出金のみ'],
-                                    ['missing', '科目未選択'],
+                                    ['missing', '未選択あり'],
                                 ] as const
                             ).map(([key, label]) => (
                                 <Button
@@ -282,11 +289,13 @@ export default function BankImportReview({
                                 {filteredRows.map((row) => {
                                     const amount = row.is_deposit ? row.deposit_amount : row.withdrawal_amount;
                                     const categoryOptions = row.is_deposit ? salesTaxCategories : purchaseTaxCategories;
+                                    const hasMissing =
+                                        missingAccountRowIds.has(row.id) || missingTaxRowIds.has(row.id);
 
                                     return (
                                         <TableRow
                                             key={row.id}
-                                            className={missingAccountRowIds.has(row.id) ? 'bg-red-50 dark:bg-red-950/20' : ''}
+                                            className={hasMissing ? 'bg-red-50 dark:bg-red-950/20' : ''}
                                         >
                                             <TableCell>
                                                 <Checkbox
@@ -332,15 +341,17 @@ export default function BankImportReview({
                                                 )}
                                             </TableCell>
                                             <TableCell>
-                                                <div className="min-w-56 space-y-2">
+                                                <div className="flex flex-col gap-1">
                                                     <Select
-                                                        value={taxCategories[row.id]}
+                                                        value={taxCategories[row.id] ?? ''}
                                                         onValueChange={(v) =>
                                                             setTaxCategories((prev) => ({ ...prev, [row.id]: v }))
                                                         }
                                                     >
-                                                        <SelectTrigger>
-                                                            <SelectValue />
+                                                        <SelectTrigger
+                                                            className={`w-48 ${missingTaxRowIds.has(row.id) ? 'border-red-500' : ''}`}
+                                                        >
+                                                            <SelectValue placeholder="税区分を選択（必須）" />
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {categoryOptions.map((option) => (
@@ -376,7 +387,7 @@ export default function BankImportReview({
                                                             description: row.description,
                                                             amount: row.amount,
                                                             account_id: row.account_id ?? null,
-                                                            consumption_tax_category: taxCategories[row.id],
+                                                            consumption_tax_category: taxCategories[row.id] ?? '',
                                                             has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
                                                         }}
                                                         accountGroups={accountGroups}

@@ -39,7 +39,7 @@ export default function ConsumptionTaxFields({
         <div className="space-y-4">
             <div className="grid gap-2">
                 <Label htmlFor={`${idPrefix}_category`}>税区分</Label>
-                <Select value={category} onValueChange={onCategoryChange}>
+                <Select value={category || undefined} onValueChange={onCategoryChange}>
                     <SelectTrigger id={`${idPrefix}_category`}>
                         <SelectValue placeholder="税区分を選択" />
                     </SelectTrigger>

@@ -1,4 +1,4 @@
-import { defaultCategoryForAccount, type TaxCategoryOption } from '@/components/consumption-tax-fields';
+import { type TaxCategoryOption } from '@/components/consumption-tax-fields';
 import CreditCardImportRowEditDialog from '@/components/credit-card-import-row-edit-dialog';
 import { DataTable, DataTableHeader } from '@/components/data-table';
 import { FlashAlert } from '@/components/flash-alert';
@@ -33,7 +33,7 @@ interface ImportRow {
     amount: number;
     suggested_account_id?: number | null;
     account_id?: number | null;
-    consumption_tax_category: string;
+    consumption_tax_category: string | null;
     has_qualified_invoice: boolean;
 }
 
@@ -87,7 +87,9 @@ function initialAccountSelections(rows: ImportRow[]): Record<number, string> {
 function initialTaxCategories(rows: ImportRow[]): Record<number, string> {
     const categories: Record<number, string> = {};
     for (const row of rows) {
-        categories[row.id] = row.consumption_tax_category;
+        if (row.consumption_tax_category) {
+            categories[row.id] = row.consumption_tax_category;
+        }
     }
     return categories;
 }
@@ -137,12 +139,16 @@ export default function CreditCardImportReview({
         );
     }, [rows, selectedIds, accountSelections]);
 
+    const missingTaxRowIds = useMemo(() => {
+        return new Set(rows.filter((row) => selectedIds.has(row.id) && !taxCategories[row.id]).map((row) => row.id));
+    }, [rows, selectedIds, taxCategories]);
+
     const filteredRows = useMemo(() => {
         if (rowFilter === 'missing') {
-            return rows.filter((row) => missingAccountRowIds.has(row.id));
+            return rows.filter((row) => missingAccountRowIds.has(row.id) || missingTaxRowIds.has(row.id));
         }
         return rows;
-    }, [rows, rowFilter, missingAccountRowIds]);
+    }, [rows, rowFilter, missingAccountRowIds, missingTaxRowIds]);
 
     const toggleRow = (id: number, checked: boolean) => {
         setSelectedIds((prev) => {
@@ -162,10 +168,6 @@ export default function CreditCardImportReview({
 
     const handleAccountChange = (rowId: number, accountId: string) => {
         setAccountSelections((prev) => ({ ...prev, [rowId]: accountId }));
-        setTaxCategories((prev) => ({
-            ...prev,
-            [rowId]: defaultCategoryForAccount(Number(accountId), expenseAccounts, 'taxable_purchase_10'),
-        }));
     };
 
     const handleSkip = (rowId: number) => {
@@ -180,7 +182,7 @@ export default function CreditCardImportReview({
             .map((row) => ({
                 row_id: row.id,
                 ...(accountSelections[row.id] ? { account_id: Number(accountSelections[row.id]) } : {}),
-                consumption_tax_category: taxCategories[row.id],
+                consumption_tax_category: taxCategories[row.id] || null,
                 has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
             }));
 
@@ -222,6 +224,11 @@ export default function CreditCardImportReview({
                             value: `${missingAccountRowIds.size}件`,
                             variant: missingAccountRowIds.size > 0 ? 'warning' : 'default',
                         },
+                        {
+                            label: '税区分未選択',
+                            value: `${missingTaxRowIds.size}件`,
+                            variant: missingTaxRowIds.size > 0 ? 'warning' : 'default',
+                        },
                         ...(importSummary?.detected_format
                             ? [{ label: '判別形式', value: importSummary.detected_format }]
                             : []),
@@ -249,7 +256,7 @@ export default function CreditCardImportReview({
                             {(
                                 [
                                     ['all', 'すべて'],
-                                    ['missing', '科目未選択'],
+                                    ['missing', '未選択あり'],
                                 ] as const
                             ).map(([key, label]) => (
                                 <Button
@@ -279,57 +286,63 @@ export default function CreditCardImportReview({
                                 </TableRow>
                             </DataTableHeader>
                             <TableBody>
-                                {filteredRows.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        className={missingAccountRowIds.has(row.id) ? 'bg-red-50 dark:bg-red-950/20' : ''}
-                                    >
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedIds.has(row.id)}
-                                                onCheckedChange={(c) => toggleRow(row.id, c === true)}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="whitespace-nowrap">{formatDate(row.transaction_date)}</TableCell>
-                                        <TableCell>{row.description}</TableCell>
-                                        <TableCell className="text-right whitespace-nowrap tabular-nums">
-                                            {formatAmount(row.amount)}
-                                        </TableCell>
+                                {filteredRows.map((row) => {
+                                    const hasMissing =
+                                        missingAccountRowIds.has(row.id) || missingTaxRowIds.has(row.id);
+
+                                    return (
+                                        <TableRow
+                                            key={row.id}
+                                            className={hasMissing ? 'bg-red-50 dark:bg-red-950/20' : ''}
+                                        >
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedIds.has(row.id)}
+                                                    onCheckedChange={(c) => toggleRow(row.id, c === true)}
+                                                />
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap">{formatDate(row.transaction_date)}</TableCell>
+                                            <TableCell>{row.description}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap tabular-nums">
+                                                {formatAmount(row.amount)}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col gap-1">
+                                                    <Select
+                                                        value={accountSelections[row.id] ?? ''}
+                                                        onValueChange={(v) => handleAccountChange(row.id, v)}
+                                                    >
+                                                        <SelectTrigger
+                                                            className={`w-48 ${missingAccountRowIds.has(row.id) ? 'border-red-500' : ''}`}
+                                                        >
+                                                            <SelectValue placeholder="経費科目を選択（必須）" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {expenseAccounts.map((account) => (
+                                                                <SelectItem key={account.id} value={String(account.id)}>
+                                                                    {account.name}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    {row.suggested_account_id &&
+                                                        accountSelections[row.id] === String(row.suggested_account_id) && (
+                                                            <span className="text-muted-foreground text-xs">自動提案</span>
+                                                        )}
+                                                </div>
+                                            </TableCell>
                                         <TableCell>
                                             <div className="flex flex-col gap-1">
                                                 <Select
-                                                    value={accountSelections[row.id] ?? ''}
-                                                    onValueChange={(v) => handleAccountChange(row.id, v)}
-                                                >
-                                                    <SelectTrigger
-                                                        className={`w-48 ${missingAccountRowIds.has(row.id) ? 'border-red-500' : ''}`}
-                                                    >
-                                                        <SelectValue placeholder="経費科目を選択（必須）" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {expenseAccounts.map((account) => (
-                                                            <SelectItem key={account.id} value={String(account.id)}>
-                                                                {account.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                {row.suggested_account_id &&
-                                                    accountSelections[row.id] === String(row.suggested_account_id) && (
-                                                        <span className="text-muted-foreground text-xs">自動提案</span>
-                                                    )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="min-w-56 space-y-2">
-                                                <Select
-                                                    value={taxCategories[row.id]}
+                                                    value={taxCategories[row.id] ?? ''}
                                                     onValueChange={(v) =>
                                                         setTaxCategories((prev) => ({ ...prev, [row.id]: v }))
                                                     }
                                                 >
-                                                    <SelectTrigger>
-                                                        <SelectValue />
+                                                    <SelectTrigger
+                                                        className={`w-48 ${missingTaxRowIds.has(row.id) ? 'border-red-500' : ''}`}
+                                                    >
+                                                        <SelectValue placeholder="税区分を選択（必須）" />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {purchaseTaxCategories.map((option) => (
@@ -353,35 +366,36 @@ export default function CreditCardImportReview({
                                                 </label>
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <CreditCardImportRowEditDialog
-                                                    rowId={row.id}
-                                                    initialValues={{
-                                                        transaction_date: row.transaction_date,
-                                                        description: row.description,
-                                                        amount: row.amount,
-                                                        account_id: row.account_id ?? null,
-                                                        consumption_tax_category: taxCategories[row.id],
-                                                        has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
-                                                    }}
-                                                    accountGroups={accountGroups}
-                                                    expenseAccounts={expenseAccounts}
-                                                    purchaseTaxCategories={purchaseTaxCategories}
-                                                    hasActiveFiscalYear={hasActiveFiscalYear}
-                                                    trigger={
-                                                        <Button type="button" variant="ghost" size="sm">
-                                                            <Pencil className="size-4" />
-                                                        </Button>
-                                                    }
-                                                />
-                                                <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
-                                                    スキップ
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <CreditCardImportRowEditDialog
+                                                        rowId={row.id}
+                                                        initialValues={{
+                                                            transaction_date: row.transaction_date,
+                                                            description: row.description,
+                                                            amount: row.amount,
+                                                            account_id: row.account_id ?? null,
+                                                            consumption_tax_category: taxCategories[row.id] ?? '',
+                                                            has_qualified_invoice: qualifiedInvoices[row.id] ?? true,
+                                                        }}
+                                                        accountGroups={accountGroups}
+                                                        expenseAccounts={expenseAccounts}
+                                                        purchaseTaxCategories={purchaseTaxCategories}
+                                                        hasActiveFiscalYear={hasActiveFiscalYear}
+                                                        trigger={
+                                                            <Button type="button" variant="ghost" size="sm">
+                                                                <Pencil className="size-4" />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                    <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
+                                                        スキップ
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </DataTable>
 
