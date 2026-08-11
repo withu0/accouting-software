@@ -122,7 +122,25 @@ class ReportControllerTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
-        $this->assertStringContainsString('税区分', $response->streamedContent());
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('税区分', $content);
+        $this->assertStringContainsString('事業者区分', $content);
+        $this->assertStringContainsString('課税事業者', $content);
+    }
+
+    public function test_exempt_company_consumption_tax_csv_exports_exempt_style_data(): void
+    {
+        $this->company->update(['tax_entity_status' => 'exempt']);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('reports.export', ['type' => 'consumption_tax', 'format' => 'csv']));
+
+        $response->assertOk();
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('免税事業者', $content);
+        $this->assertStringContainsString('事業者区分', $content);
+        $this->assertStringContainsString('納付税額見込', $content);
+        $this->assertStringContainsString(',0', $content);
     }
 
     public function test_consumption_tax_pdf_export_returns_404(): void

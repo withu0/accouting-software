@@ -2,6 +2,7 @@ import InputError from '@/components/input-error';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useIsTaxExempt } from '@/hooks/use-is-tax-exempt';
 
 export interface TaxCategoryOption {
     value: string;
@@ -33,7 +34,12 @@ export default function ConsumptionTaxFields({
     showQualifiedInvoice = true,
     idPrefix = 'tax',
 }: ConsumptionTaxFieldsProps) {
+    const isTaxExempt = useIsTaxExempt();
     const showInvoiceCheckbox = showQualifiedInvoice && PURCHASE_BASE_CATEGORIES.has(category);
+
+    if (isTaxExempt) {
+        return null;
+    }
 
     return (
         <div className="space-y-4">

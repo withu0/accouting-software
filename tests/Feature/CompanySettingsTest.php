@@ -126,4 +126,31 @@ class CompanySettingsTest extends TestCase
             'is_active' => false,
         ]);
     }
+
+    public function test_user_can_update_tax_entity_status(): void
+    {
+        $user = User::factory()->create();
+        $company = Company::create(['user_id' => $user->id]);
+
+        $response = $this->actingAs($user)->patch(route('consumption-tax.update'), [
+            'tax_entity_status' => 'exempt',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('companies', [
+            'id' => $company->id,
+            'tax_entity_status' => 'exempt',
+        ]);
+        $this->assertTrue($company->fresh()->isTaxExempt());
+    }
+
+    public function test_consumption_tax_settings_page_renders(): void
+    {
+        $user = User::factory()->create();
+        Company::create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->get(route('consumption-tax.edit'))
+            ->assertOk();
+    }
 }

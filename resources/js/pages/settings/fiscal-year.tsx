@@ -10,9 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate, toDateInputValue } from '@/lib/dates';
-import { type BreadcrumbItem, type Company } from '@/types';
+import { type BreadcrumbItem, type Company, type SharedData } from '@/types';
 import { Transition } from '@headlessui/react';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { CalendarDays } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
@@ -51,6 +51,8 @@ export default function FiscalYearSettings({
     consumptionTaxMethods,
     simplifiedTaxIndustries,
 }: Props) {
+    const { auth } = usePage<SharedData>().props;
+    const isTaxExempt = auth.company?.tax_entity_status === 'exempt';
     const isUpdate = activeFiscalYear !== null;
 
     const companyForm = useForm({
@@ -125,30 +127,32 @@ export default function FiscalYearSettings({
                             <InputError message={companyForm.errors.address} />
                         </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="consumption_tax_method">課税方式</Label>
-                            <Select
-                                value={companyForm.data.consumption_tax_method}
-                                onValueChange={(v) => companyForm.setData('consumption_tax_method', v)}
-                            >
-                                <SelectTrigger id="consumption_tax_method">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {consumptionTaxMethods.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <p className="text-muted-foreground text-xs">
-                                消費税区分集計レポートの計算方式に影響します。変更時は税区分の設定も合わせて確認してください。
-                            </p>
-                            <InputError message={companyForm.errors.consumption_tax_method} />
-                        </div>
+                        {!isTaxExempt && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="consumption_tax_method">課税方式</Label>
+                                <Select
+                                    value={companyForm.data.consumption_tax_method}
+                                    onValueChange={(v) => companyForm.setData('consumption_tax_method', v)}
+                                >
+                                    <SelectTrigger id="consumption_tax_method">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {consumptionTaxMethods.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-muted-foreground text-xs">
+                                    消費税区分集計レポートの計算方式に影響します。変更時は税区分の設定も合わせて確認してください。
+                                </p>
+                                <InputError message={companyForm.errors.consumption_tax_method} />
+                            </div>
+                        )}
 
-                        {companyForm.data.consumption_tax_method === 'simplified' && (
+                        {!isTaxExempt && companyForm.data.consumption_tax_method === 'simplified' && (
                             <div className="grid gap-2">
                                 <Label htmlFor="simplified_tax_industry">簡易課税業種</Label>
                                 <Select
@@ -168,6 +172,12 @@ export default function FiscalYearSettings({
                                 </Select>
                                 <InputError message={companyForm.errors.simplified_tax_industry} />
                             </div>
+                        )}
+
+                        {isTaxExempt && (
+                            <p className="text-muted-foreground text-sm">
+                                現在は免税事業者のため、課税方式の設定は表示されません。変更は「その他 → 消費税設定」から行えます。
+                            </p>
                         )}
 
                         <div className="flex items-center gap-4">

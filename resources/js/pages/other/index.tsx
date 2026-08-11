@@ -5,7 +5,7 @@ import { SectionHeader } from '@/components/section-header';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Calendar, FileSpreadsheet, Receipt } from 'lucide-react';
+import { Calendar, FileSpreadsheet, Percent, Receipt } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'ホーム', href: route('home') },
@@ -33,6 +33,12 @@ const settingsItems = [
         description: '会計年度の開始日・終了日を設定します',
         icon: Calendar,
         href: route('fiscal-year.edit'),
+    },
+    {
+        title: '消費税設定',
+        description: '免税事業者か課税事業者かを選択します',
+        icon: Percent,
+        href: route('consumption-tax.edit'),
     },
 ];
 

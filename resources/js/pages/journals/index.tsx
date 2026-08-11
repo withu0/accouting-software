@@ -46,12 +46,20 @@ interface BankCsvEditMeta {
     has_qualified_invoice: boolean;
 }
 
+interface JournalLine {
+    account_name: string;
+    debit: number;
+    credit: number;
+    consumption_tax_category?: string | null;
+}
+
 interface JournalEntry {
     id: number;
     entry_date: string;
     description: string;
     source: string;
     total_amount: number;
+    lines: JournalLine[];
     debit_account_name: string;
     credit_account_name: string;
     bank_csv_edit?: BankCsvEditMeta;
@@ -331,8 +339,20 @@ export default function JournalsIndex({
                                                 </TableCell>
                                                 <TableCell className="font-medium">{entry.description}</TableCell>
                                                 <TableCell>
-                                                    <span className="block text-[13px]">借 {entry.debit_account_name}</span>
-                                                    <span className="text-muted-foreground block text-[13px]">貸 {entry.credit_account_name}</span>
+                                                    <div className="space-y-1 text-[13px]">
+                                                        {(entry.lines ?? []).map((line, lineIndex) => (
+                                                            <div key={`${entry.id}-summary-${lineIndex}`}>
+                                                                {line.debit > 0 && (
+                                                                    <span className="block">借 {line.account_name}</span>
+                                                                )}
+                                                                {line.credit > 0 && (
+                                                                    <span className="text-muted-foreground block">
+                                                                        貸 {line.account_name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">
                                                     <Badge
@@ -420,16 +440,42 @@ export default function JournalsIndex({
                                             {isExpanded && (
                                                 <TableRow className="bg-muted/20 hover:bg-muted/20">
                                                     <TableCell colSpan={hasDeletableEntries ? 7 : 6} className="py-3">
-                                                        <div className="grid gap-2 text-[13px] sm:grid-cols-2">
+                                                        <div className="grid gap-3 text-[13px] sm:grid-cols-2">
                                                             <div className="rounded-lg border bg-background px-4 py-3">
-                                                                <p className="text-muted-foreground mb-1 text-xs font-medium">借方</p>
-                                                                <p className="font-medium">{entry.debit_account_name}</p>
-                                                                <p className="mt-1 tabular-nums">{formatAmount(entry.total_amount)}</p>
+                                                                <p className="text-muted-foreground mb-2 text-xs font-medium">借方</p>
+                                                                <div className="space-y-2">
+                                                                    {(entry.lines ?? [])
+                                                                        .filter((line) => line.debit > 0)
+                                                                        .map((line, lineIndex) => (
+                                                                            <div
+                                                                                key={`${entry.id}-debit-${lineIndex}`}
+                                                                                className="flex items-baseline justify-between gap-3"
+                                                                            >
+                                                                                <p className="font-medium">{line.account_name}</p>
+                                                                                <p className="tabular-nums">
+                                                                                    {formatAmount(line.debit)}
+                                                                                </p>
+                                                                            </div>
+                                                                        ))}
+                                                                </div>
                                                             </div>
                                                             <div className="rounded-lg border bg-background px-4 py-3">
-                                                                <p className="text-muted-foreground mb-1 text-xs font-medium">貸方</p>
-                                                                <p className="font-medium">{entry.credit_account_name}</p>
-                                                                <p className="mt-1 tabular-nums">{formatAmount(entry.total_amount)}</p>
+                                                                <p className="text-muted-foreground mb-2 text-xs font-medium">貸方</p>
+                                                                <div className="space-y-2">
+                                                                    {(entry.lines ?? [])
+                                                                        .filter((line) => line.credit > 0)
+                                                                        .map((line, lineIndex) => (
+                                                                            <div
+                                                                                key={`${entry.id}-credit-${lineIndex}`}
+                                                                                className="flex items-baseline justify-between gap-3"
+                                                                            >
+                                                                                <p className="font-medium">{line.account_name}</p>
+                                                                                <p className="tabular-nums">
+                                                                                    {formatAmount(line.credit)}
+                                                                                </p>
+                                                                            </div>
+                                                                        ))}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </TableCell>

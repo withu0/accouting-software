@@ -131,10 +131,10 @@ enum ConsumptionTaxCategory: string
      */
     public static function optionsForTransfer(): array
     {
-        return self::toOptions([
-            self::OutOfScope,
-            self::NonTaxable,
-        ]);
+        return self::toOptions(array_values(array_filter(
+            self::cases(),
+            fn (self $case) => $case->isUserSelectable(),
+        )));
     }
 
     /**

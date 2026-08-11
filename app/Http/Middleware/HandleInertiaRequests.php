@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\TaxEntityStatus;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -47,7 +48,13 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $user,
-                'company' => $company?->only('id', 'name', 'representative_name', 'address'),
+                'company' => $company === null ? null : [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                    'representative_name' => $company->representative_name,
+                    'address' => $company->address,
+                    'tax_entity_status' => ($company->tax_entity_status ?? TaxEntityStatus::Taxable)->value,
+                ],
                 'activeFiscalYear' => $activeFiscalYear?->only('id', 'start_date', 'end_date'),
             ],
             'flash' => [

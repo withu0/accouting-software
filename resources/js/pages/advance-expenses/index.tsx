@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { useIsTaxExempt } from '@/hooks/use-is-tax-exempt';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
@@ -246,6 +247,7 @@ export default function AdvanceExpensesIndex({
     hasActiveFiscalYear,
     receiptScanAvailable,
 }: Props) {
+    const isTaxExempt = useIsTaxExempt();
     const { flash, errors: pageErrors } = usePage<
         SharedData & {
             flash?: {
@@ -282,14 +284,15 @@ export default function AdvanceExpensesIndex({
         if (scan.merchant_name) {
             setData('description', scan.merchant_name);
         }
-        if (scan.consumption_tax_category) {
+        if (!isTaxExempt && scan.consumption_tax_category) {
             setData('consumption_tax_category', scan.consumption_tax_category);
         }
 
         const lowConfidence =
             (scan.entry_date != null && scan.confidence.date != null && scan.confidence.date < 0.7) ||
             (scan.amount != null && scan.confidence.amount != null && scan.confidence.amount < 0.7) ||
-            (scan.consumption_tax_category != null &&
+            (!isTaxExempt &&
+                scan.consumption_tax_category != null &&
                 scan.confidence.consumption_tax_category != null &&
                 scan.confidence.consumption_tax_category < 0.7);
 
@@ -300,7 +303,7 @@ export default function AdvanceExpensesIndex({
         } else {
             setScanNotice('領収書から読み取った内容をフォームに反映しました。内容を確認してから登録してください。');
         }
-    }, [flash?.receiptScan, setData]);
+    }, [flash?.receiptScan, isTaxExempt, setData]);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -349,7 +352,11 @@ export default function AdvanceExpensesIndex({
                     left={
                         <FormSection
                             title="立替経費を登録"
-                            description="領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額・税区分を自動入力できます。経費科目などは手入力してください。"
+                            description={
+                                isTaxExempt
+                                    ? '領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額を自動入力できます。経費科目などは手入力してください。'
+                                    : '領収書画像をアップロードし、領収書部分を切り取って確認すると日付・金額・税区分を自動入力できます。経費科目などは手入力してください。'
+                            }
                         >
                             <form onSubmit={submit} className="space-y-4">
                                 <ReceiptScanUpload
@@ -400,7 +407,6 @@ export default function AdvanceExpensesIndex({
                                         value={data.description}
                                         disabled={!hasActiveFiscalYear || processing}
                                         onChange={(e) => setData('description', e.target.value)}
-                                        required
                                     />
                                     <InputError message={errors.description} />
                                 </div>

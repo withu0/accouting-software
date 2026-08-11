@@ -2,12 +2,18 @@
 
 use App\Http\Controllers\Settings\AccountSettingsController;
 use App\Http\Controllers\Settings\CompanySettingsController;
+use App\Http\Controllers\Settings\ConsumptionTaxSettingsController;
 use App\Http\Controllers\Settings\FiscalYearSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function () {
     Route::patch('settings/company', [CompanySettingsController::class, 'update'])
         ->name('company.update');
+
+    Route::get('settings/consumption-tax', [ConsumptionTaxSettingsController::class, 'edit'])
+        ->name('consumption-tax.edit');
+    Route::patch('settings/consumption-tax', [ConsumptionTaxSettingsController::class, 'update'])
+        ->name('consumption-tax.update');
 
     Route::get('settings/fiscal-year', [FiscalYearSettingsController::class, 'edit'])
         ->name('fiscal-year.edit');

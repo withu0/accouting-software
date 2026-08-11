@@ -223,8 +223,9 @@ class ReportController extends Controller
     {
         fputcsv($handle, ['会社名', $report['company_name']]);
         fputcsv($handle, ['会計期間', $report['fiscal_period']]);
+        fputcsv($handle, ['事業者区分', $report['tax_entity_status_label'] ?? '課税事業者']);
         fputcsv($handle, ['課税方式', $report['tax_method']]);
-        if ($report['simplified_industry'] !== null) {
+        if (! empty($report['simplified_industry'])) {
             fputcsv($handle, ['簡易課税業種', $report['simplified_industry']]);
         }
         fputcsv($handle, []);

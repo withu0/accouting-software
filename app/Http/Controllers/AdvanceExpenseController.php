@@ -82,7 +82,9 @@ class AdvanceExpenseController extends Controller
         $officerLoanAccount = Account::findByName('役員借入金');
         $amount = (int) $validated['amount'];
         $entryDate = Carbon::parse($validated['entry_date']);
-        $baseCategory = ConsumptionTaxCategory::from($validated['consumption_tax_category']);
+        $baseCategory = ConsumptionTaxCategory::from(
+            $validated['consumption_tax_category'] ?? ConsumptionTaxCategory::OutOfScope->value,
+        );
         $hasQualifiedInvoice = $baseCategory->isBasePurchase()
             ? (bool) ($validated['has_qualified_invoice'] ?? true)
             : null;
@@ -95,7 +97,7 @@ class AdvanceExpenseController extends Controller
         $this->journalService->createBalancedEntry(
             $company,
             $entryDate,
-            $validated['description'],
+            $validated['description'] ?? '',
             JournalSource::AdvanceExpense,
             $this->consumptionTaxService->buildJournalLines(
                 $effectiveCategory,
@@ -103,10 +105,11 @@ class AdvanceExpenseController extends Controller
                 $expenseAccount->id,
                 $officerLoanAccount->id,
                 false,
+                $company->isTaxExempt(),
             ),
             null,
-            $baseCategory,
-            $hasQualifiedInvoice,
+            $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $baseCategory,
+            $company->isTaxExempt() ? null : $hasQualifiedInvoice,
         );
 
         return back()->with('success', '立替経費を登録しました。');
@@ -126,7 +129,9 @@ class AdvanceExpenseController extends Controller
         $officerLoanAccount = Account::findByName('役員借入金');
         $amount = (int) $validated['amount'];
         $entryDate = Carbon::parse($validated['entry_date']);
-        $baseCategory = ConsumptionTaxCategory::from($validated['consumption_tax_category']);
+        $baseCategory = ConsumptionTaxCategory::from(
+            $validated['consumption_tax_category'] ?? ConsumptionTaxCategory::OutOfScope->value,
+        );
         $hasQualifiedInvoice = $baseCategory->isBasePurchase()
             ? (bool) ($validated['has_qualified_invoice'] ?? true)
             : null;
@@ -140,16 +145,17 @@ class AdvanceExpenseController extends Controller
             $journalEntry,
             $company,
             $entryDate,
-            $validated['description'],
+            $validated['description'] ?? '',
             $this->consumptionTaxService->buildJournalLines(
                 $effectiveCategory,
                 $amount,
                 $expenseAccount->id,
                 $officerLoanAccount->id,
                 false,
+                $company->isTaxExempt(),
             ),
-            $baseCategory,
-            $hasQualifiedInvoice,
+            $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $baseCategory,
+            $company->isTaxExempt() ? null : $hasQualifiedInvoice,
         );
 
         return back()->with('success', '立替経費を更新しました。');

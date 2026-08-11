@@ -145,4 +145,79 @@ class ConsumptionTaxServiceTest extends TestCase
         $this->assertSame(100000, $lines[0]['debit']);
         $this->assertSame(100000, $lines[1]['credit']);
     }
+
+    public function test_build_journal_lines_skips_tax_split_when_tax_exempt(): void
+    {
+        $expense = Account::where('name', '消耗品費')->firstOrFail();
+        $deposit = Account::findByName('預金');
+
+        $lines = $this->service->buildJournalLines(
+            ConsumptionTaxCategory::TaxablePurchase10,
+            11000,
+            $expense->id,
+            $deposit->id,
+            false,
+            true,
+        );
+
+        $this->assertCount(2, $lines);
+        $this->assertSame(11000, $lines[0]['debit']);
+        $this->assertSame(11000, $lines[1]['credit']);
+    }
+
+    public function test_expand_transfer_lines_splits_taxable_sales(): void
+    {
+        $revenue = Account::findByName('売上高');
+        $receivable = Account::where('name', '売掛金')->firstOrFail();
+        $outputTax = Account::findByName('仮受消費税');
+
+        $expanded = $this->service->expandTransferLines([
+            [
+                'account_id' => $receivable->id,
+                'debit' => 11000,
+                'credit' => 0,
+                'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+            ],
+            [
+                'account_id' => $revenue->id,
+                'debit' => 0,
+                'credit' => 11000,
+                'consumption_tax_category' => ConsumptionTaxCategory::TaxableSales10,
+            ],
+        ], Carbon::parse('2025-05-15'));
+
+        $this->assertCount(3, $expanded);
+        $this->assertSame(11000, $expanded[0]['debit']);
+        $this->assertSame(10000, $expanded[1]['credit']);
+        $this->assertSame($outputTax->id, $expanded[2]['account_id']);
+        $this->assertSame(1000, $expanded[2]['credit']);
+        $this->assertSame(11000, collect($expanded)->sum('debit'));
+        $this->assertSame(11000, collect($expanded)->sum('credit'));
+    }
+
+    public function test_expand_transfer_lines_skips_split_when_tax_exempt(): void
+    {
+        $revenue = Account::findByName('売上高');
+        $receivable = Account::where('name', '売掛金')->firstOrFail();
+
+        $expanded = $this->service->expandTransferLines([
+            [
+                'account_id' => $receivable->id,
+                'debit' => 11000,
+                'credit' => 0,
+                'consumption_tax_category' => ConsumptionTaxCategory::TaxableSales10,
+            ],
+            [
+                'account_id' => $revenue->id,
+                'debit' => 0,
+                'credit' => 11000,
+                'consumption_tax_category' => ConsumptionTaxCategory::TaxableSales10,
+            ],
+        ], Carbon::parse('2025-05-15'), true);
+
+        $this->assertCount(2, $expanded);
+        $this->assertSame(11000, $expanded[0]['debit']);
+        $this->assertSame(11000, $expanded[1]['credit']);
+        $this->assertSame(ConsumptionTaxCategory::OutOfScope, $expanded[0]['consumption_tax_category']);
+    }
 }

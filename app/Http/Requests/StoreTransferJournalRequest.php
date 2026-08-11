@@ -15,23 +15,54 @@ class StoreTransferJournalRequest extends FormRequest
      */
     public function rules(): array
     {
+        $company = $this->user()?->ensureCompany();
+        $isExempt = $company?->isTaxExempt() ?? false;
+
         $transferTaxValues = array_map(
             fn (ConsumptionTaxCategory $case) => $case->value,
-            [ConsumptionTaxCategory::OutOfScope, ConsumptionTaxCategory::NonTaxable],
+            array_values(array_filter(
+                ConsumptionTaxCategory::cases(),
+                fn (ConsumptionTaxCategory $case) => $case->isUserSelectable(),
+            )),
         );
 
         return [
             'entry_date' => ['required', 'date'],
-            'description' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'has_qualified_invoice' => ['nullable', 'boolean'],
             'lines' => ['required', 'array', 'min:2'],
             'lines.*.account_id' => ['required', 'integer', 'exists:accounts,id'],
             'lines.*.debit' => ['required', 'integer', 'min:0'],
             'lines.*.credit' => ['required', 'integer', 'min:0'],
-            'lines.*.consumption_tax_category' => [
-                'required',
-                Rule::in($transferTaxValues),
-            ],
+            'lines.*.consumption_tax_category' => $isExempt
+                ? ['nullable', Rule::in($transferTaxValues)]
+                : ['required', Rule::in($transferTaxValues)],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('description') === null) {
+            $this->merge(['description' => '']);
+        }
+
+        $company = $this->user()?->ensureCompany();
+        if ($company?->isTaxExempt()) {
+            $lines = $this->input('lines', []);
+            if (is_array($lines)) {
+                $normalized = array_map(function ($line) {
+                    if (! is_array($line)) {
+                        return $line;
+                    }
+
+                    $line['consumption_tax_category'] = ConsumptionTaxCategory::OutOfScope->value;
+
+                    return $line;
+                }, $lines);
+
+                $this->merge(['lines' => $normalized]);
+            }
+        }
     }
 
     public function withValidator(Validator $validator): void
@@ -97,7 +128,6 @@ class StoreTransferJournalRequest extends FormRequest
     {
         return [
             'entry_date.required' => '日付を入力してください。',
-            'description.required' => '摘要を入力してください。',
             'lines.required' => '仕訳行を入力してください。',
             'lines.min' => '仕訳行は2行以上必要です。',
             'lines.*.account_id.required' => '勘定科目を選択してください。',

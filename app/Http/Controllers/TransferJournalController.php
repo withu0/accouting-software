@@ -8,6 +8,7 @@ use App\Enums\JournalSource;
 use App\Http\Requests\StoreTransferJournalRequest;
 use App\Models\Account;
 use App\Models\JournalEntry;
+use App\Services\ConsumptionTaxService;
 use App\Services\JournalService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +22,7 @@ class TransferJournalController extends Controller
 
     public function __construct(
         private readonly JournalService $journalService,
+        private readonly ConsumptionTaxService $consumptionTaxService,
     ) {}
 
     public function index(Request $request): Response
@@ -65,22 +67,35 @@ class TransferJournalController extends Controller
     {
         $company = $this->resolveCompany($request);
         $validated = $request->validated();
+        $entryDate = Carbon::parse($validated['entry_date']);
+        $hasQualifiedInvoice = array_key_exists('has_qualified_invoice', $validated)
+            ? (bool) $validated['has_qualified_invoice']
+            : true;
 
-        $lines = array_map(function (array $line): array {
+        $lines = array_map(function (array $line) use ($hasQualifiedInvoice): array {
             return [
                 'account_id' => (int) $line['account_id'],
                 'debit' => (int) $line['debit'],
                 'credit' => (int) $line['credit'],
-                'consumption_tax_category' => ConsumptionTaxCategory::from($line['consumption_tax_category']),
+                'consumption_tax_category' => ConsumptionTaxCategory::from(
+                    $line['consumption_tax_category'] ?? ConsumptionTaxCategory::OutOfScope->value,
+                ),
+                'has_qualified_invoice' => $hasQualifiedInvoice,
             ];
         }, $validated['lines']);
 
+        $expandedLines = $this->consumptionTaxService->expandTransferLines(
+            $lines,
+            $entryDate,
+            $company->isTaxExempt(),
+        );
+
         $this->journalService->createBalancedEntry(
             $company,
-            Carbon::parse($validated['entry_date']),
-            $validated['description'],
+            $entryDate,
+            $validated['description'] ?? '',
             JournalSource::Transfer,
-            $lines,
+            $expandedLines,
             null,
             null,
             null,

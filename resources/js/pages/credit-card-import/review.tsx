@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { useIsTaxExempt } from '@/hooks/use-is-tax-exempt';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
@@ -111,6 +112,7 @@ export default function CreditCardImportReview({
     hasActiveFiscalYear,
     importSummary,
 }: Props) {
+    const isTaxExempt = useIsTaxExempt();
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(rows.map((r) => r.id)));
     const [accountSelections, setAccountSelections] = useState<Record<number, string>>(() => initialAccountSelections(rows));
     const [taxCategories, setTaxCategories] = useState<Record<number, string>>(() => initialTaxCategories(rows));
@@ -140,8 +142,12 @@ export default function CreditCardImportReview({
     }, [rows, selectedIds, accountSelections]);
 
     const missingTaxRowIds = useMemo(() => {
+        if (isTaxExempt) {
+            return new Set<number>();
+        }
+
         return new Set(rows.filter((row) => selectedIds.has(row.id) && !taxCategories[row.id]).map((row) => row.id));
-    }, [rows, selectedIds, taxCategories]);
+    }, [rows, selectedIds, taxCategories, isTaxExempt]);
 
     const filteredRows = useMemo(() => {
         if (rowFilter === 'missing') {
@@ -224,11 +230,15 @@ export default function CreditCardImportReview({
                             value: `${missingAccountRowIds.size}件`,
                             variant: missingAccountRowIds.size > 0 ? 'warning' : 'default',
                         },
-                        {
-                            label: '税区分未選択',
-                            value: `${missingTaxRowIds.size}件`,
-                            variant: missingTaxRowIds.size > 0 ? 'warning' : 'default',
-                        },
+                        ...(!isTaxExempt
+                            ? [
+                                  {
+                                      label: '税区分未選択',
+                                      value: `${missingTaxRowIds.size}件`,
+                                      variant: (missingTaxRowIds.size > 0 ? 'warning' : 'default') as 'warning' | 'default',
+                                  },
+                              ]
+                            : []),
                         ...(importSummary?.detected_format
                             ? [{ label: '判別形式', value: importSummary.detected_format }]
                             : []),
@@ -281,7 +291,7 @@ export default function CreditCardImportReview({
                                     <TableHead>店名</TableHead>
                                     <TableHead className="text-right">金額</TableHead>
                                     <TableHead>経費科目</TableHead>
-                                    <TableHead>税区分</TableHead>
+                                    {!isTaxExempt && <TableHead>税区分</TableHead>}
                                     <TableHead className="text-right">操作</TableHead>
                                 </TableRow>
                             </DataTableHeader>
@@ -331,6 +341,7 @@ export default function CreditCardImportReview({
                                                         )}
                                                 </div>
                                             </TableCell>
+                                        {!isTaxExempt && (
                                         <TableCell>
                                             <div className="flex flex-col gap-1">
                                                 <Select
@@ -366,6 +377,7 @@ export default function CreditCardImportReview({
                                                 </label>
                                             </div>
                                         </TableCell>
+                                        )}
                                             <TableCell className="text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                     <CreditCardImportRowEditDialog

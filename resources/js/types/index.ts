@@ -5,6 +5,7 @@ export interface Company {
     name: string | null;
     representative_name: string | null;
     address: string | null;
+    tax_entity_status?: 'taxable' | 'exempt';
 }
 
 export interface FiscalYear {

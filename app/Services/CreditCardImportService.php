@@ -281,8 +281,10 @@ class CreditCardImportService
         DB::transaction(function () use ($company, $row, $rowUpdates, $entry, $entryDate, $data, $lines, $accountId, $previousAccountId) {
             $row->update($rowUpdates);
 
-            $taxCategory = $this->resolveBaseCategory($data);
-            $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($taxCategory, $data);
+            $taxCategory = $this->resolveBaseCategory($data, $company);
+            $hasQualifiedInvoice = $company->isTaxExempt()
+                ? null
+                : $this->resolveHasQualifiedInvoice($taxCategory, $data);
 
             $this->journalService->updateBalancedEntry(
                 $entry,
@@ -290,7 +292,7 @@ class CreditCardImportService
                 $entryDate,
                 $data['description'],
                 $lines,
-                $taxCategory,
+                $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $taxCategory,
                 $hasQualifiedInvoice,
             );
 
@@ -339,8 +341,10 @@ class CreditCardImportService
 
         $payableAccount = Account::findByName('未払金');
         $entryDate = Carbon::parse($row->transaction_date);
-        $baseCategory = $this->resolveBaseCategory($options);
-        $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
+        $baseCategory = $this->resolveBaseCategory($options, $company);
+        $hasQualifiedInvoice = $company->isTaxExempt()
+            ? null
+            : $this->resolveHasQualifiedInvoice($baseCategory, $options);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
             $baseCategory,
             $hasQualifiedInvoice,
@@ -352,6 +356,7 @@ class CreditCardImportService
             $expenseAccountId,
             $payableAccount->id,
             false,
+            $company->isTaxExempt(),
         );
 
         return $this->journalService->createBalancedEntry(
@@ -361,7 +366,7 @@ class CreditCardImportService
             JournalSource::CreditCardCsv,
             $lines,
             $idempotencyKey,
-            $baseCategory,
+            $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $baseCategory,
             $hasQualifiedInvoice,
         );
     }
@@ -373,8 +378,10 @@ class CreditCardImportService
     private function buildExpenseJournalLines(Company $company, Carbon $entryDate, int $amount, int $expenseAccountId, array $options): array
     {
         $payableAccount = Account::findByName('未払金');
-        $baseCategory = $this->resolveBaseCategory($options);
-        $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
+        $baseCategory = $this->resolveBaseCategory($options, $company);
+        $hasQualifiedInvoice = $company->isTaxExempt()
+            ? null
+            : $this->resolveHasQualifiedInvoice($baseCategory, $options);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
             $baseCategory,
             $hasQualifiedInvoice,
@@ -387,14 +394,19 @@ class CreditCardImportService
             $expenseAccountId,
             $payableAccount->id,
             false,
+            $company->isTaxExempt(),
         );
     }
 
     /**
      * @param  array{consumption_tax_category?: string}  $options
      */
-    private function resolveBaseCategory(array $options): ConsumptionTaxCategory
+    private function resolveBaseCategory(array $options, ?Company $company = null): ConsumptionTaxCategory
     {
+        if ($company?->isTaxExempt()) {
+            return ConsumptionTaxCategory::OutOfScope;
+        }
+
         if (empty($options['consumption_tax_category'])) {
             throw new InvalidArgumentException('税区分を選択してください。');
         }

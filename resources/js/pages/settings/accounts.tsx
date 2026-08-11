@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { useIsTaxExempt } from '@/hooks/use-is-tax-exempt';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
@@ -61,6 +62,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function AccountSettings({ accountGroups, accountTypes, taxCategoryOptions }: Props) {
     const { errors } = usePage<SharedData & { flash?: { success?: string }; errors?: Record<string, string> }>().props;
+    const isTaxExempt = useIsTaxExempt();
     const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
     const [deletingAccount, setDeletingAccount] = useState<AccountItem | null>(null);
     const [activeTab, setActiveTab] = useState('expense');
@@ -229,6 +231,7 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                     <InputError message={createForm.errors.type} />
                                 </div>
 
+                                {!isTaxExempt && (
                                 <div className="grid gap-2 sm:col-span-4">
                                     <Label htmlFor="create_tax_category">デフォルト税区分</Label>
                                     <Select
@@ -248,6 +251,7 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                     </Select>
                                     <InputError message={createForm.errors.default_consumption_tax_category} />
                                 </div>
+                                )}
 
                                 <div className="sm:col-span-4">
                                     <Button type="submit" disabled={createForm.processing}>
@@ -278,7 +282,7 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                     <TableRow>
                                         <TableHead>コード</TableHead>
                                         <TableHead>科目名</TableHead>
-                                        <TableHead>デフォルト税区分</TableHead>
+                                        {!isTaxExempt && <TableHead>デフォルト税区分</TableHead>}
                                         <TableHead className="text-right">表示順</TableHead>
                                         <TableHead className="text-right">操作</TableHead>
                                     </TableRow>
@@ -286,7 +290,7 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                 <TableBody>
                                     {filteredAccounts.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                                            <TableCell colSpan={isTaxExempt ? 4 : 5} className="text-muted-foreground py-8 text-center">
                                                 {searchQuery ? '検索条件に一致する科目がありません' : 'この区分の勘定科目はありません'}
                                             </TableCell>
                                         </TableRow>
@@ -295,11 +299,13 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                             <TableRow key={account.id}>
                                                 <TableCell className="font-mono text-[13px]">{account.code}</TableCell>
                                                 <TableCell className="font-medium">{account.name}</TableCell>
+                                                {!isTaxExempt && (
                                                 <TableCell className="text-muted-foreground text-[13px]">
                                                     {optionsForType(account.type).find(
                                                         (option) => option.value === account.default_consumption_tax_category,
                                                     )?.label ?? '—'}
                                                 </TableCell>
+                                                )}
                                                 <TableCell className="text-right tabular-nums">{account.display_order}</TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-1">
@@ -384,6 +390,7 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                 <InputError message={editForm.errors.type} />
                             </div>
 
+                            {!isTaxExempt && (
                             <div className="grid gap-2">
                                 <Label htmlFor="edit_tax_category">デフォルト税区分</Label>
                                 <Select
@@ -403,6 +410,7 @@ export default function AccountSettings({ accountGroups, accountTypes, taxCatego
                                 </Select>
                                 <InputError message={editForm.errors.default_consumption_tax_category} />
                             </div>
+                            )}
 
                             <div className="grid gap-2">
                                 <Label htmlFor="edit_display_order">表示順</Label>

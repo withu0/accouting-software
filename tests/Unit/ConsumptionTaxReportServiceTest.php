@@ -150,4 +150,85 @@ class ConsumptionTaxReportServiceTest extends TestCase
         $this->assertSame(1, $nonTaxableRow['transaction_count']);
         $this->assertSame(5000, $nonTaxableRow['gross_total']);
     }
+
+    public function test_aggregate_for_exempt_company_collapses_to_out_of_scope_with_zero_tax(): void
+    {
+        $this->company->update(['tax_entity_status' => 'exempt']);
+
+        $deposit = Account::findByName('預金');
+        $revenue = Account::findByName('売上高');
+        $consumptionTaxService = app(\App\Services\ConsumptionTaxService::class);
+
+        $this->journalService->createBalancedEntry(
+            $this->company,
+            Carbon::parse('2025-05-01'),
+            '免税売上',
+            JournalSource::BankCsv,
+            $consumptionTaxService->buildJournalLines(
+                ConsumptionTaxCategory::TaxableSales10,
+                11000,
+                $revenue->id,
+                $deposit->id,
+                true,
+                true,
+            ),
+            null,
+            ConsumptionTaxCategory::OutOfScope,
+            null,
+        );
+
+        $report = $this->reportService->aggregate($this->company->fresh(), $this->fiscalYear);
+
+        $this->assertTrue($report['is_tax_exempt']);
+        $this->assertSame('免税事業者', $report['tax_entity_status_label']);
+        $this->assertSame('免税事業者', $report['tax_method']);
+        $this->assertSame(0, $report['summary']['output_tax_total']);
+        $this->assertSame(0, $report['summary']['input_tax_total']);
+        $this->assertSame(0, $report['summary']['estimated_tax_payable']);
+
+        $this->assertCount(1, $report['rows']);
+        $this->assertSame(ConsumptionTaxCategory::OutOfScope->value, $report['rows'][0]['category']);
+        $this->assertSame(11000, $report['rows'][0]['gross_total']);
+        $this->assertSame(11000, $report['rows'][0]['net_total']);
+        $this->assertSame(0, $report['rows'][0]['tax_total']);
+    }
+
+    public function test_exempt_transfer_journal_is_counted_once_not_per_line(): void
+    {
+        $this->company->update(['tax_entity_status' => 'exempt']);
+
+        $accountsReceivable = Account::where('name', '売掛金')->firstOrFail();
+        $revenue = Account::findByName('売上高');
+
+        $this->journalService->createBalancedEntry(
+            $this->company,
+            Carbon::parse('2025-05-04'),
+            '免税振替',
+            JournalSource::Transfer,
+            [
+                [
+                    'account_id' => $accountsReceivable->id,
+                    'debit' => 11000,
+                    'credit' => 0,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+                ],
+                [
+                    'account_id' => $revenue->id,
+                    'debit' => 0,
+                    'credit' => 11000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+                ],
+            ],
+            null,
+            null,
+            null,
+        );
+
+        $report = $this->reportService->aggregate($this->company->fresh(), $this->fiscalYear);
+
+        $this->assertCount(1, $report['rows']);
+        $this->assertSame(1, $report['rows'][0]['transaction_count']);
+        $this->assertSame(11000, $report['rows'][0]['gross_total']);
+        $this->assertSame(0, $report['rows'][0]['tax_total']);
+    }
 }

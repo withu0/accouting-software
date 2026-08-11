@@ -43,12 +43,21 @@ class JournalController extends Controller
         }
 
         $entries = $query->paginate(25)->through(function ($entry) {
+            $lines = $entry->lines->map(fn ($line) => [
+                'account_name' => $line->account?->name ?? '',
+                'debit' => $line->debit,
+                'credit' => $line->credit,
+                'consumption_tax_category' => $line->consumption_tax_category?->value
+                    ?? $entry->consumption_tax_category?->value,
+            ])->values()->all();
+
             $data = [
                 'id' => $entry->id,
                 'entry_date' => $entry->entry_date->format('Y-m-d'),
                 'description' => $entry->description,
                 'source' => $entry->source->value,
                 'total_amount' => $entry->lines->sum('debit'),
+                'lines' => $lines,
                 'debit_account_name' => $entry->lines->first(fn ($line) => $line->debit > 0)?->account?->name ?? '',
                 'credit_account_name' => $entry->lines->first(fn ($line) => $line->credit > 0)?->account?->name ?? '',
             ];

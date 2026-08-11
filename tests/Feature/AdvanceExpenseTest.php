@@ -291,4 +291,52 @@ class AdvanceExpenseTest extends TestCase
             ], $this->purchaseTaxPayload()))
             ->assertSessionHasErrors('account_id');
     }
+
+    public function test_blank_description_is_allowed(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('advance-expenses.store'), array_merge([
+                'entry_date' => '2025-05-15',
+                'amount' => 1100,
+                'description' => '',
+                'account_id' => $this->expenseAccount->id,
+            ], $this->purchaseTaxPayload()))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('journal_entries', [
+            'company_id' => $this->company->id,
+            'description' => '',
+            'source' => JournalSource::AdvanceExpense->value,
+        ]);
+    }
+
+    public function test_exempt_company_posts_tax_inclusive_without_input_tax(): void
+    {
+        $this->company->update(['tax_entity_status' => 'exempt']);
+        $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('advance-expenses.store'), [
+                'entry_date' => '2025-05-15',
+                'amount' => 1100,
+                'description' => '免税の立替',
+                'account_id' => $this->expenseAccount->id,
+            ])
+            ->assertRedirect();
+
+        $entry = JournalEntry::where('description', '免税の立替')->firstOrFail();
+        $this->assertCount(2, $entry->lines);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $this->expenseAccount->id,
+            'debit' => 1100,
+            'credit' => 0,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $officerLoanAccount->id,
+            'debit' => 0,
+            'credit' => 1100,
+        ]);
+    }
 }

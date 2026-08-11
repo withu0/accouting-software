@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { useIsTaxExempt } from '@/hooks/use-is-tax-exempt';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/dates';
 import { type BreadcrumbItem, type SharedData } from '@/types';
@@ -86,6 +87,7 @@ export default function TransferJournal({
     hasActiveFiscalYear,
 }: Props) {
     const { flash } = usePage<SharedData & { flash?: { success?: string } }>().props;
+    const isTaxExempt = useIsTaxExempt();
     const [rows, setRows] = useState<TransferJournalRow[]>([createEmptyRow()]);
 
     const { data, setData, post, processing, errors, reset, transform } = useForm({
@@ -252,7 +254,6 @@ export default function TransferJournal({
                                     value={data.description}
                                     disabled={!hasActiveFiscalYear || processing}
                                     onChange={(e) => setData('description', e.target.value)}
-                                    required
                                 />
                                 <InputError message={errors.description} />
                             </div>
@@ -302,24 +303,28 @@ export default function TransferJournal({
                                                                 <span>
                                                                     借 {line.account_name}{' '}
                                                                     <span className="tabular-nums">{formatAmount(line.debit)}</span>
-                                                                    <span className="text-muted-foreground ml-2 text-xs">
-                                                                        {taxCategoryLabel(
-                                                                            line.consumption_tax_category,
-                                                                            transferTaxCategories,
-                                                                        )}
-                                                                    </span>
+                                                                    {!isTaxExempt && (
+                                                                        <span className="text-muted-foreground ml-2 text-xs">
+                                                                            {taxCategoryLabel(
+                                                                                line.consumption_tax_category,
+                                                                                transferTaxCategories,
+                                                                            )}
+                                                                        </span>
+                                                                    )}
                                                                 </span>
                                                             )}
                                                             {line.credit > 0 && (
                                                                 <span>
                                                                     貸 {line.account_name}{' '}
                                                                     <span className="tabular-nums">{formatAmount(line.credit)}</span>
-                                                                    <span className="text-muted-foreground ml-2 text-xs">
-                                                                        {taxCategoryLabel(
-                                                                            line.consumption_tax_category,
-                                                                            transferTaxCategories,
-                                                                        )}
-                                                                    </span>
+                                                                    {!isTaxExempt && (
+                                                                        <span className="text-muted-foreground ml-2 text-xs">
+                                                                            {taxCategoryLabel(
+                                                                                line.consumption_tax_category,
+                                                                                transferTaxCategories,
+                                                                            )}
+                                                                        </span>
+                                                                    )}
                                                                 </span>
                                                             )}
                                                         </div>

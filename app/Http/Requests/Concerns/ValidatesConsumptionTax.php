@@ -13,6 +13,16 @@ trait ValidatesConsumptionTax
      */
     protected function consumptionTaxRules(bool $requireCategory = true): array
     {
+        $company = $this->user()?->ensureCompany();
+        $isExempt = $company?->isTaxExempt() ?? false;
+
+        if ($isExempt) {
+            return [
+                'consumption_tax_category' => ['nullable', Rule::enum(ConsumptionTaxCategory::class)],
+                'has_qualified_invoice' => ['nullable', 'boolean'],
+            ];
+        }
+
         $categoryRule = $requireCategory ? ['required'] : ['nullable'];
 
         return [
@@ -32,5 +42,18 @@ trait ValidatesConsumptionTax
             ],
             'has_qualified_invoice' => ['nullable', 'boolean'],
         ];
+    }
+
+    protected function normalizeExemptTaxCategory(): void
+    {
+        $company = $this->user()?->ensureCompany();
+        if ($company === null || ! $company->isTaxExempt()) {
+            return;
+        }
+
+        $this->merge([
+            'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope->value,
+            'has_qualified_invoice' => null,
+        ]);
     }
 }

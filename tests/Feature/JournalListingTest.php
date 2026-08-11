@@ -125,6 +125,60 @@ class JournalListingTest extends TestCase
                 ->where('entries.data.0.total_amount', 100000)
                 ->where('entries.data.0.debit_account_name', '預金')
                 ->where('entries.data.0.credit_account_name', '売上高')
+                ->has('entries.data.0.lines', 2)
+                ->where('entries.data.0.lines.0.account_name', '預金')
+                ->where('entries.data.0.lines.0.debit', 100000)
+                ->where('entries.data.0.lines.1.account_name', '売上高')
+                ->where('entries.data.0.lines.1.credit', 100000)
+            );
+    }
+
+    public function test_journal_listing_includes_all_split_tax_lines(): void
+    {
+        $expenseAccount = Account::where('name', '水道光熱費')->firstOrFail();
+        $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
+        $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
+
+        $entry = JournalEntry::create([
+            'company_id' => $this->company->id,
+            'fiscal_year_id' => $this->activeFiscalYear->id,
+            'entry_date' => '2025-05-15',
+            'description' => '立替の税分解',
+            'source' => JournalSource::AdvanceExpense,
+        ]);
+
+        JournalLine::create([
+            'journal_entry_id' => $entry->id,
+            'account_id' => $expenseAccount->id,
+            'debit' => 1000,
+            'credit' => 0,
+        ]);
+        JournalLine::create([
+            'journal_entry_id' => $entry->id,
+            'account_id' => $inputTaxAccount->id,
+            'debit' => 100,
+            'credit' => 0,
+        ]);
+        JournalLine::create([
+            'journal_entry_id' => $entry->id,
+            'account_id' => $officerLoanAccount->id,
+            'debit' => 0,
+            'credit' => 1100,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('journals.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('journals/index')
+                ->has('entries.data', 1)
+                ->has('entries.data.0.lines', 3)
+                ->where('entries.data.0.lines.0.account_name', '水道光熱費')
+                ->where('entries.data.0.lines.0.debit', 1000)
+                ->where('entries.data.0.lines.1.account_name', '仮払消費税')
+                ->where('entries.data.0.lines.1.debit', 100)
+                ->where('entries.data.0.lines.2.account_name', '役員借入金')
+                ->where('entries.data.0.lines.2.credit', 1100)
             );
     }
 }

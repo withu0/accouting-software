@@ -68,7 +68,7 @@ class ConsumptionTaxService
     }
 
     /**
-     * @return array<int, array{account_id: int, debit: int, credit: int}>
+     * @return array<int, array{account_id: int, debit: int, credit: int, consumption_tax_category?: string|null}>
      */
     public function buildJournalLines(
         ConsumptionTaxCategory $effectiveCategory,
@@ -76,7 +76,12 @@ class ConsumptionTaxService
         int $primaryAccountId,
         int $counterAccountId,
         bool $isRevenue,
+        bool $taxExempt = false,
     ): array {
+        if ($taxExempt) {
+            $effectiveCategory = ConsumptionTaxCategory::OutOfScope;
+        }
+
         if ($isRevenue) {
             return $this->buildRevenueLines($effectiveCategory, $gross, $primaryAccountId, $counterAccountId);
         }
@@ -87,29 +92,124 @@ class ConsumptionTaxService
     /**
      * @return array<int, array{account_id: int, debit: int, credit: int}>
      */
-    public function buildTaxableRevenueLines(int $gross, int $depositAccountId, int $revenueAccountId): array
-    {
+    public function buildTaxableRevenueLines(
+        int $gross,
+        int $depositAccountId,
+        int $revenueAccountId,
+        bool $taxExempt = false,
+    ): array {
         return $this->buildJournalLines(
             ConsumptionTaxCategory::TaxableSales10,
             $gross,
             $revenueAccountId,
             $depositAccountId,
             true,
+            $taxExempt,
         );
     }
 
     /**
      * @return array<int, array{account_id: int, debit: int, credit: int}>
      */
-    public function buildTaxableExpenseLines(int $gross, int $expenseAccountId, int $creditAccountId): array
-    {
+    public function buildTaxableExpenseLines(
+        int $gross,
+        int $expenseAccountId,
+        int $creditAccountId,
+        bool $taxExempt = false,
+    ): array {
         return $this->buildJournalLines(
             ConsumptionTaxCategory::TaxablePurchase10,
             $gross,
             $expenseAccountId,
             $creditAccountId,
             false,
+            $taxExempt,
         );
+    }
+
+    /**
+     * Expand one-sided transfer journal lines (税込) into net + 仮受/仮払 companion lines.
+     *
+     * @param  list<array{account_id: int, debit: int, credit: int, consumption_tax_category: ConsumptionTaxCategory|string|null, has_qualified_invoice?: bool|null}>  $lines
+     * @return list<array{account_id: int, debit: int, credit: int, consumption_tax_category: ConsumptionTaxCategory|null}>
+     */
+    public function expandTransferLines(array $lines, Carbon $entryDate, bool $taxExempt = false): array
+    {
+        $expanded = [];
+
+        foreach ($lines as $line) {
+            $category = $line['consumption_tax_category'] ?? ConsumptionTaxCategory::OutOfScope;
+            if (is_string($category)) {
+                $category = ConsumptionTaxCategory::from($category);
+            }
+
+            if ($taxExempt) {
+                $category = ConsumptionTaxCategory::OutOfScope;
+            }
+
+            $debit = (int) ($line['debit'] ?? 0);
+            $credit = (int) ($line['credit'] ?? 0);
+            $gross = $debit > 0 ? $debit : $credit;
+            $isDebit = $debit > 0;
+
+            $hasQualifiedInvoice = array_key_exists('has_qualified_invoice', $line)
+                ? $line['has_qualified_invoice']
+                : null;
+
+            $effective = $this->resolveEffectiveCategory($category, $hasQualifiedInvoice, $entryDate);
+            $split = $this->splitInclusive($gross, $effective);
+
+            if ($split['tax'] === 0) {
+                $expanded[] = [
+                    'account_id' => (int) $line['account_id'],
+                    'debit' => $isDebit ? $gross : 0,
+                    'credit' => $isDebit ? 0 : $gross,
+                    'consumption_tax_category' => $effective,
+                ];
+
+                continue;
+            }
+
+            if ($effective->isPurchase()) {
+                $primaryAmount = $split['net'] + $split['non_deductible_tax'];
+                $expanded[] = [
+                    'account_id' => (int) $line['account_id'],
+                    'debit' => $isDebit ? $primaryAmount : 0,
+                    'credit' => $isDebit ? 0 : $primaryAmount,
+                    'consumption_tax_category' => $effective,
+                ];
+
+                if ($split['deductible_tax'] > 0) {
+                    $inputTaxAccount = $this->requireAccount('仮払消費税');
+                    $expanded[] = [
+                        'account_id' => $inputTaxAccount->id,
+                        'debit' => $isDebit ? $split['deductible_tax'] : 0,
+                        'credit' => $isDebit ? 0 : $split['deductible_tax'],
+                        'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+                    ];
+                }
+
+                continue;
+            }
+
+            // Sales / output tax
+            $expanded[] = [
+                'account_id' => (int) $line['account_id'],
+                'debit' => $isDebit ? $split['net'] : 0,
+                'credit' => $isDebit ? 0 : $split['net'],
+                'consumption_tax_category' => $effective,
+            ];
+
+            $outputTaxAccount = $this->requireAccount('仮受消費税');
+            $expanded[] = [
+                'account_id' => $outputTaxAccount->id,
+                'debit' => $isDebit ? $split['tax'] : 0,
+                'credit' => $isDebit ? 0 : $split['tax'],
+                'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope,
+            ];
+        }
+
+        return $expanded;
     }
 
     /**

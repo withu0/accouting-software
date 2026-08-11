@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ConsumptionTaxMethod;
 use App\Enums\SimplifiedTaxIndustry;
+use App\Enums\TaxEntityStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,6 +19,7 @@ class Company extends Model
         'fiscal_year_start_month',
         'consumption_tax_method',
         'simplified_tax_industry',
+        'tax_entity_status',
     ];
 
     protected function casts(): array
@@ -26,7 +28,13 @@ class Company extends Model
             'fiscal_year_start_month' => 'integer',
             'consumption_tax_method' => ConsumptionTaxMethod::class,
             'simplified_tax_industry' => SimplifiedTaxIndustry::class,
+            'tax_entity_status' => TaxEntityStatus::class,
         ];
+    }
+
+    public function isTaxExempt(): bool
+    {
+        return ($this->tax_entity_status ?? TaxEntityStatus::Taxable) === TaxEntityStatus::Exempt;
     }
 
     public function user(): BelongsTo

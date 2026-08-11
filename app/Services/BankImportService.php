@@ -345,8 +345,10 @@ class BankImportService
         DB::transaction(function () use ($company, $row, $rowUpdates, $entry, $entryDate, $data, $lines, $accountId, $previousAccountId, $isDeposit) {
             $row->update($rowUpdates);
 
-            $taxCategory = $this->resolveBaseCategory($data);
-            $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($taxCategory, $data);
+            $taxCategory = $this->resolveBaseCategory($data, $company);
+            $hasQualifiedInvoice = $company->isTaxExempt()
+                ? null
+                : $this->resolveHasQualifiedInvoice($taxCategory, $data);
 
             $this->journalService->updateBalancedEntry(
                 $entry,
@@ -354,7 +356,7 @@ class BankImportService
                 $entryDate,
                 $data['description'],
                 $lines,
-                $taxCategory,
+                $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $taxCategory,
                 $hasQualifiedInvoice,
             );
 
@@ -405,7 +407,7 @@ class BankImportService
 
         if ($row->deposit_amount > 0) {
             $revenueAccount = Account::findByName('売上高');
-            $baseCategory = $this->resolveBaseCategory($options);
+            $baseCategory = $this->resolveBaseCategory($options, $company);
             $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory($baseCategory, null, $entryDate);
             $lines = $this->consumptionTaxService->buildJournalLines(
                 $effectiveCategory,
@@ -413,6 +415,7 @@ class BankImportService
                 $revenueAccount->id,
                 $depositAccount->id,
                 true,
+                $company->isTaxExempt(),
             );
 
             return $this->journalService->createBalancedEntry(
@@ -422,7 +425,7 @@ class BankImportService
                 JournalSource::BankCsv,
                 $lines,
                 $idempotencyKey,
-                $baseCategory,
+                $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $baseCategory,
                 null,
             );
         }
@@ -436,8 +439,10 @@ class BankImportService
             throw new InvalidArgumentException('Invalid expense account selected.');
         }
 
-        $baseCategory = $this->resolveBaseCategory($options);
-        $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
+        $baseCategory = $this->resolveBaseCategory($options, $company);
+        $hasQualifiedInvoice = $company->isTaxExempt()
+            ? null
+            : $this->resolveHasQualifiedInvoice($baseCategory, $options);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
             $baseCategory,
             $hasQualifiedInvoice,
@@ -449,6 +454,7 @@ class BankImportService
             $expenseAccountId,
             $depositAccount->id,
             false,
+            $company->isTaxExempt(),
         );
 
         return $this->journalService->createBalancedEntry(
@@ -458,7 +464,7 @@ class BankImportService
             JournalSource::BankCsv,
             $lines,
             $idempotencyKey,
-            $baseCategory,
+            $company->isTaxExempt() ? ConsumptionTaxCategory::OutOfScope : $baseCategory,
             $hasQualifiedInvoice,
         );
     }
@@ -470,7 +476,7 @@ class BankImportService
     private function buildRevenueJournalLines(Company $company, Carbon $entryDate, int $amount, int $revenueAccountId, array $options): array
     {
         $depositAccount = Account::findByName('預金');
-        $baseCategory = $this->resolveBaseCategory($options);
+        $baseCategory = $this->resolveBaseCategory($options, $company);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory($baseCategory, null, $entryDate);
 
         return $this->consumptionTaxService->buildJournalLines(
@@ -479,6 +485,7 @@ class BankImportService
             $revenueAccountId,
             $depositAccount->id,
             true,
+            $company->isTaxExempt(),
         );
     }
 
@@ -489,8 +496,10 @@ class BankImportService
     private function buildExpenseJournalLines(Company $company, Carbon $entryDate, int $amount, int $expenseAccountId, array $options): array
     {
         $depositAccount = Account::findByName('預金');
-        $baseCategory = $this->resolveBaseCategory($options);
-        $hasQualifiedInvoice = $this->resolveHasQualifiedInvoice($baseCategory, $options);
+        $baseCategory = $this->resolveBaseCategory($options, $company);
+        $hasQualifiedInvoice = $company->isTaxExempt()
+            ? null
+            : $this->resolveHasQualifiedInvoice($baseCategory, $options);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory(
             $baseCategory,
             $hasQualifiedInvoice,
@@ -503,14 +512,19 @@ class BankImportService
             $expenseAccountId,
             $depositAccount->id,
             false,
+            $company->isTaxExempt(),
         );
     }
 
     /**
      * @param  array{consumption_tax_category?: string}  $options
      */
-    private function resolveBaseCategory(array $options): ConsumptionTaxCategory
+    private function resolveBaseCategory(array $options, ?Company $company = null): ConsumptionTaxCategory
     {
+        if ($company?->isTaxExempt()) {
+            return ConsumptionTaxCategory::OutOfScope;
+        }
+
         if (empty($options['consumption_tax_category'])) {
             throw new InvalidArgumentException('税区分を選択してください。');
         }

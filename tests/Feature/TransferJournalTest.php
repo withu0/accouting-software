@@ -362,6 +362,99 @@ class TransferJournalTest extends TestCase
         }
     }
 
+    public function test_taxable_sales_line_is_auto_split(): void
+    {
+        $outputTax = Account::where('name', '仮受消費税')->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post(route('transfer-journal.store'), $this->transferPayload([
+                [
+                    'account_id' => $this->accountsReceivable->id,
+                    'debit' => 11000,
+                    'credit' => 0,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope->value,
+                ],
+                [
+                    'account_id' => $this->revenueAccount->id,
+                    'debit' => 0,
+                    'credit' => 11000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::TaxableSales10->value,
+                ],
+            ], '課税売上の振替'))
+            ->assertRedirect();
+
+        $entry = JournalEntry::where('description', '課税売上の振替')->firstOrFail();
+        $this->assertCount(3, $entry->lines);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $this->revenueAccount->id,
+            'debit' => 0,
+            'credit' => 10000,
+        ]);
+        $this->assertDatabaseHas('journal_lines', [
+            'journal_entry_id' => $entry->id,
+            'account_id' => $outputTax->id,
+            'debit' => 0,
+            'credit' => 1000,
+        ]);
+    }
+
+    public function test_blank_description_is_allowed(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('transfer-journal.store'), $this->transferPayload([
+                [
+                    'account_id' => $this->accountsReceivable->id,
+                    'debit' => 1000,
+                    'credit' => 0,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope->value,
+                ],
+                [
+                    'account_id' => $this->revenueAccount->id,
+                    'debit' => 0,
+                    'credit' => 1000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::OutOfScope->value,
+                ],
+            ], ''))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('journal_entries', [
+            'company_id' => $this->company->id,
+            'description' => '',
+            'source' => JournalSource::Transfer->value,
+        ]);
+    }
+
+    public function test_exempt_company_does_not_split_taxable_transfer(): void
+    {
+        $this->company->update(['tax_entity_status' => 'exempt']);
+
+        $this->actingAs($this->user)
+            ->post(route('transfer-journal.store'), $this->transferPayload([
+                [
+                    'account_id' => $this->accountsReceivable->id,
+                    'debit' => 11000,
+                    'credit' => 0,
+                    'consumption_tax_category' => ConsumptionTaxCategory::TaxableSales10->value,
+                ],
+                [
+                    'account_id' => $this->revenueAccount->id,
+                    'debit' => 0,
+                    'credit' => 11000,
+                    'consumption_tax_category' => ConsumptionTaxCategory::TaxableSales10->value,
+                ],
+            ], '免税の振替'))
+            ->assertRedirect();
+
+        $entry = JournalEntry::where('description', '免税の振替')->firstOrFail();
+        $this->assertCount(2, $entry->lines);
+        $this->assertSame(11000, $entry->lines->sum('debit'));
+        $this->assertSame(11000, $entry->lines->sum('credit'));
+        $this->assertTrue($entry->lines->every(
+            fn ($line) => $line->consumption_tax_category === ConsumptionTaxCategory::OutOfScope
+        ));
+    }
+
     /**
      * @param  list<array{account_id: int, debit: int, credit: int, consumption_tax_category: string}>  $lines
      * @return array{entry_date: string, description: string, lines: list<array{account_id: int, debit: int, credit: int, consumption_tax_category: string}>}

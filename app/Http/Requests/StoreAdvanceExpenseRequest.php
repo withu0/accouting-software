@@ -20,9 +20,18 @@ class StoreAdvanceExpenseRequest extends FormRequest
         return array_merge([
             'entry_date' => ['required', 'date'],
             'amount' => ['required', 'integer', 'min:1'],
-            'description' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:255'],
             'account_id' => ['required', 'integer', 'exists:accounts,id'],
         ], $this->consumptionTaxRules());
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeExemptTaxCategory();
+
+        if ($this->input('description') === null) {
+            $this->merge(['description' => '']);
+        }
     }
 
     public function withValidator(Validator $validator): void
@@ -66,7 +75,6 @@ class StoreAdvanceExpenseRequest extends FormRequest
             'entry_date.required' => '日付を入力してください。',
             'amount.required' => '金額を入力してください。',
             'amount.min' => '金額は1円以上で入力してください。',
-            'description.required' => '摘要を入力してください。',
             'account_id.required' => '経費科目を選択してください。',
         ];
     }

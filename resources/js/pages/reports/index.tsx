@@ -93,6 +93,9 @@ interface GeneralLedgerReport {
 interface ConsumptionTaxReport {
     company_name: string;
     fiscal_period: string;
+    tax_entity_status?: string;
+    tax_entity_status_label?: string;
+    is_tax_exempt?: boolean;
     tax_method: string;
     simplified_industry: string | null;
     rows: Array<{
@@ -166,6 +169,7 @@ function ExportButtons({ type }: { type: string }) {
 
 export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName, fiscalYear }: Props) {
     const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('pl');
+    const isTaxExempt = reports.consumption_tax?.is_tax_exempt === true;
 
     const periodLabel =
         fiscalYear != null ? `${formatDate(fiscalYear.start_date)} 〜 ${formatDate(fiscalYear.end_date)}` : '未設定';
@@ -442,7 +446,11 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
                                 companyName={displayCompanyName}
                                 periodLabel={periodLabel}
                                 title="消費税区分集計"
-                                description="税区分別の取引集計と納付税額見込"
+                                description={
+                                    isTaxExempt
+                                        ? '免税事業者のため、税込金額を対象外として集計します（消費税額は0円）'
+                                        : '税区分別の取引集計と納付税額見込'
+                                }
                                 toolbar={hasActiveFiscalYear ? <ExportButtons type="consumption_tax" /> : undefined}
                             >
                                 {reports.consumption_tax ? (
@@ -466,6 +474,11 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
                                         </div>
 
                                         <div className="text-muted-foreground grid gap-1 text-sm sm:grid-cols-2">
+                                            <p>
+                                                事業者区分:{' '}
+                                                {reports.consumption_tax.tax_entity_status_label ??
+                                                    (isTaxExempt ? '免税事業者' : '課税事業者')}
+                                            </p>
                                             <p>課税方式: {reports.consumption_tax.tax_method}</p>
                                             {reports.consumption_tax.simplified_industry && (
                                                 <p>簡易課税業種: {reports.consumption_tax.simplified_industry}</p>
