@@ -71,7 +71,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear, recentImpor
             <PageContainer size="full">
                 <PageHeader
                     title="クレジットカードCSV取込"
-                    description="クレジットカード明細CSVを取り込み、経費仕訳（未払金計上）を作成します"
+                    description="個人カードの明細を取り込み、経費 / 役員借入金で仕訳します。事業外の支払いは仕訳しません。"
                     actions={
                         <Button asChild variant="outline">
                             <Link href={route('credit-card-import.history')}>取込履歴</Link>
@@ -118,7 +118,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear, recentImpor
                     <SummaryStrip
                         items={[
                             { label: '形式', value: '既知形式 → AI判定' },
-                            { label: '記帳', value: '経費 / 未払金' },
+                            { label: '記帳', value: '経費 / 役員借入金' },
                         ]}
                     />
                 </div>
@@ -162,7 +162,7 @@ export default function CreditCardImportIndex({ hasActiveFiscalYear, recentImpor
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-                                            記帳 {record.confirmed_count} / 未処理 {record.pending_count} / スキップ{' '}
+                                            記帳 {record.confirmed_count} / 未処理 {record.pending_count} / プライベート{' '}
                                             {record.skipped_count}
                                         </TableCell>
                                         <TableCell className="text-right">

@@ -94,6 +94,7 @@ const sourceLabels: Record<string, string> = {
     advance_expense: '立替経費',
     transfer: '振替伝票',
     manual: '手動',
+    opening_balance: '開始残高',
 };
 
 const sourceBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
@@ -232,6 +233,7 @@ export default function JournalsIndex({
                                         <SelectItem value="advance_expense">立替経費</SelectItem>
                                         <SelectItem value="transfer">振替伝票</SelectItem>
                                         <SelectItem value="manual">手動</SelectItem>
+                                        <SelectItem value="opening_balance">開始残高</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

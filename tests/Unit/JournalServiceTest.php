@@ -44,7 +44,7 @@ class JournalServiceTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->depositAccount = Account::where('name', '預金')->firstOrFail();
+        $this->depositAccount = Account::where('name', '普通預金')->firstOrFail();
         $this->revenueAccount = Account::where('name', '売上高')->firstOrFail();
     }
 

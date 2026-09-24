@@ -75,7 +75,7 @@ class ConsumptionTaxServiceTest extends TestCase
 
     public function test_build_taxable_revenue_lines(): void
     {
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
         $outputTax = Account::findByName('仮受消費税');
 
@@ -92,7 +92,7 @@ class ConsumptionTaxServiceTest extends TestCase
 
     public function test_build_export_exempt_revenue_lines(): void
     {
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
 
         $lines = $this->service->buildJournalLines(
@@ -111,7 +111,7 @@ class ConsumptionTaxServiceTest extends TestCase
     public function test_build_taxable_expense_lines_with_partial_deduction(): void
     {
         $expense = Account::where('name', '消耗品費')->firstOrFail();
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $inputTax = Account::findByName('仮払消費税');
 
         $lines = $this->service->buildJournalLines(
@@ -131,7 +131,7 @@ class ConsumptionTaxServiceTest extends TestCase
     public function test_build_non_taxable_expense_lines(): void
     {
         $expense = Account::where('name', '地代家賃')->firstOrFail();
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
 
         $lines = $this->service->buildJournalLines(
             ConsumptionTaxCategory::NonTaxable,
@@ -149,7 +149,7 @@ class ConsumptionTaxServiceTest extends TestCase
     public function test_build_journal_lines_skips_tax_split_when_tax_exempt(): void
     {
         $expense = Account::where('name', '消耗品費')->firstOrFail();
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
 
         $lines = $this->service->buildJournalLines(
             ConsumptionTaxCategory::TaxablePurchase10,

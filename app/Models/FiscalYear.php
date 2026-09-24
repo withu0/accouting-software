@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class FiscalYear extends Model
 {
@@ -14,6 +15,7 @@ class FiscalYear extends Model
         'start_date',
         'end_date',
         'is_active',
+        'closed_at',
     ];
 
     protected function casts(): array
@@ -22,6 +24,7 @@ class FiscalYear extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'is_active' => 'boolean',
+            'closed_at' => 'datetime',
         ];
     }
 
@@ -33,6 +36,16 @@ class FiscalYear extends Model
     public function journalEntries(): HasMany
     {
         return $this->hasMany(JournalEntry::class);
+    }
+
+    public function openingBalance(): HasOne
+    {
+        return $this->hasOne(OpeningBalance::class);
+    }
+
+    public function isClosed(): bool
+    {
+        return $this->closed_at !== null;
     }
 
     public function scopeActive(Builder $query): Builder

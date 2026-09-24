@@ -4,6 +4,7 @@ use App\Http\Controllers\AdvanceExpenseController;
 use App\Http\Controllers\BankImportController;
 use App\Http\Controllers\CreditCardImportController;
 use App\Http\Controllers\JournalController;
+use App\Http\Controllers\OpeningBalanceController;
 use App\Http\Controllers\ReceiptScanController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TransferJournalController;
@@ -39,6 +40,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('credit-card-import/{import}/confirm', [CreditCardImportController::class, 'confirm'])->name('credit-card-import.confirm');
     Route::patch('credit-card-import/rows/{row}', [CreditCardImportController::class, 'updateRow'])->name('credit-card-import.rows.update');
     Route::post('credit-card-import/rows/{row}/skip', [CreditCardImportController::class, 'skipRow'])->name('credit-card-import.rows.skip');
+    Route::post('credit-card-import/rows/{row}/unskip', [CreditCardImportController::class, 'unskipRow'])->name('credit-card-import.rows.unskip');
 
     Route::get('advance-expenses', [AdvanceExpenseController::class, 'index'])->name('advance-expenses');
     Route::post('advance-expenses', [AdvanceExpenseController::class, 'store'])->name('advance-expenses.store');
@@ -50,9 +52,15 @@ Route::middleware(['auth'])->group(function () {
         ->name('receipt-scans.store');
 
     Route::get('reports', [ReportController::class, 'index'])->name('reports');
+    Route::put('reports/equity', [ReportController::class, 'updateEquity'])->name('reports.equity.update');
+    Route::delete('reports/equity', [ReportController::class, 'revertEquity'])->name('reports.equity.revert');
     Route::get('reports/{type}/export/{format}', [ReportController::class, 'export'])->name('reports.export');
 
     Route::get('other', fn () => Inertia::render('other/index'))->name('other');
+
+    Route::get('other/opening-balances', [OpeningBalanceController::class, 'edit'])->name('opening-balances.edit');
+    Route::put('other/opening-balances', [OpeningBalanceController::class, 'save'])->name('opening-balances.save');
+    Route::post('other/opening-balances/confirm', [OpeningBalanceController::class, 'confirm'])->name('opening-balances.confirm');
 
     Route::get('other/transfer-journal', [TransferJournalController::class, 'index'])->name('transfer-journal.index');
     Route::post('other/transfer-journal', [TransferJournalController::class, 'store'])->name('transfer-journal.store');

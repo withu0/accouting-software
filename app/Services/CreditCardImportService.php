@@ -3,9 +3,9 @@
 namespace App\Services;
 
 use App\Enums\ConsumptionTaxCategory;
+use App\Enums\CreditCardCsvFormat;
 use App\Enums\CreditCardImportRowStatus;
 use App\Enums\CreditCardImportStatus;
-use App\Enums\CreditCardCsvFormat;
 use App\Enums\JournalSource;
 use App\Models\Account;
 use App\Models\Company;
@@ -221,6 +221,20 @@ class CreditCardImportService
         $this->updateImportStatus($row->creditCardImport);
     }
 
+    public function unskipRow(Company $company, CreditCardImportRow $row): void
+    {
+        if ($row->company_id !== $company->id) {
+            throw new InvalidArgumentException('Row does not belong to this company.');
+        }
+
+        if ($row->status !== CreditCardImportRowStatus::Skipped) {
+            throw new InvalidArgumentException('Only skipped rows can be restored.');
+        }
+
+        $row->update(['status' => CreditCardImportRowStatus::Pending]);
+        $this->updateImportStatus($row->creditCardImport);
+    }
+
     /**
      * @param  array{transaction_date: string, description: string, amount: int, account_id: int, consumption_tax_category?: string, has_qualified_invoice?: bool}  $data
      */
@@ -306,7 +320,7 @@ class CreditCardImportService
     {
         $entry->loadMissing('lines.account');
 
-        $excludedNames = ['未払金', '仮払消費税', '仮受消費税'];
+        $excludedNames = ['役員借入金', '仮払消費税', '仮受消費税'];
 
         foreach ($entry->lines as $line) {
             if (in_array($line->account->name, $excludedNames, true)) {
@@ -339,7 +353,7 @@ class CreditCardImportService
             throw new InvalidArgumentException('Invalid expense account selected.');
         }
 
-        $payableAccount = Account::findByName('未払金');
+        $payableAccount = Account::findByName('役員借入金');
         $entryDate = Carbon::parse($row->transaction_date);
         $baseCategory = $this->resolveBaseCategory($options, $company);
         $hasQualifiedInvoice = $company->isTaxExempt()
@@ -377,7 +391,7 @@ class CreditCardImportService
      */
     private function buildExpenseJournalLines(Company $company, Carbon $entryDate, int $amount, int $expenseAccountId, array $options): array
     {
-        $payableAccount = Account::findByName('未払金');
+        $payableAccount = Account::findByName('役員借入金');
         $baseCategory = $this->resolveBaseCategory($options, $company);
         $hasQualifiedInvoice = $company->isTaxExempt()
             ? null

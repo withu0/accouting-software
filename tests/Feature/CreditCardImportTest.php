@@ -80,7 +80,7 @@ class CreditCardImportTest extends TestCase
             ])
             ->assertRedirect();
 
-        $payableAccount = Account::where('name', '未払金')->firstOrFail();
+        $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
         $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
 
         $this->assertDatabaseHas('journal_entries', [
@@ -106,7 +106,7 @@ class CreditCardImportTest extends TestCase
         ]);
         $this->assertDatabaseHas('journal_lines', [
             'journal_entry_id' => $entry->id,
-            'account_id' => $payableAccount->id,
+            'account_id' => $officerLoanAccount->id,
             'debit' => 0,
             'credit' => 1996,
         ]);
@@ -158,6 +158,13 @@ class CreditCardImportTest extends TestCase
 
         $row->refresh();
         $this->assertEquals(CreditCardImportRowStatus::Skipped, $row->status);
+
+        $this->actingAs($this->user)
+            ->post(route('credit-card-import.rows.unskip', $row->id))
+            ->assertRedirect();
+
+        $row->refresh();
+        $this->assertEquals(CreditCardImportRowStatus::Pending, $row->status);
     }
 
     public function test_csv_outside_fiscal_year_is_rejected(): void

@@ -95,7 +95,7 @@ class AdvanceExpenseTest extends TestCase
 
     public function test_non_expense_account_is_rejected(): void
     {
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
 
         $this->actingAs($this->user)
             ->post(route('advance-expenses.store'), array_merge([
@@ -241,7 +241,7 @@ class AdvanceExpenseTest extends TestCase
     public function test_update_rejects_wrong_source(): void
     {
         $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
 
         $entry = JournalEntry::create([
             'company_id' => $this->company->id,
@@ -268,7 +268,7 @@ class AdvanceExpenseTest extends TestCase
     public function test_update_validates_expense_account(): void
     {
         $officerLoanAccount = Account::where('name', '役員借入金')->firstOrFail();
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
 
         $entry = JournalEntry::create([
             'company_id' => $this->company->id,

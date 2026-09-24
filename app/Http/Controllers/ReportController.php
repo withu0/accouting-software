@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesCompany;
+use App\Http\Requests\UpdateEquityStatementRequest;
 use App\Models\Company;
 use App\Models\FiscalYear;
 use App\Services\ConsumptionTaxReportService;
 use App\Services\DompdfFontRegistrar;
+use App\Services\EquityStatementService;
+use App\Services\OpeningBalanceService;
 use App\Services\ReportService;
 use App\Support\JapaneseDateFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
@@ -21,7 +25,7 @@ class ReportController extends Controller
 {
     use ResolvesCompany;
 
-    private const VALID_TYPES = ['pl', 'bs', 'journal', 'ledger', 'consumption_tax'];
+    private const VALID_TYPES = ['pl', 'bs', 'journal', 'ledger', 'consumption_tax', 'equity', 'statements'];
 
     private const VALID_FORMATS = ['pdf', 'csv'];
 
@@ -31,11 +35,15 @@ class ReportController extends Controller
         'journal' => '仕訳帳',
         'ledger' => '総勘定元帳',
         'consumption_tax' => '消費税区分集計',
+        'equity' => '株主資本等変動計算書',
+        'statements' => '決算書',
     ];
 
     public function __construct(
         private readonly ReportService $reportService,
         private readonly ConsumptionTaxReportService $consumptionTaxReportService,
+        private readonly EquityStatementService $equityStatementService,
+        private readonly OpeningBalanceService $openingBalanceService,
         private readonly DompdfFontRegistrar $dompdfFontRegistrar,
     ) {}
 
@@ -50,6 +58,7 @@ class ReportController extends Controller
             'journal' => null,
             'ledger' => null,
             'consumption_tax' => null,
+            'equity' => null,
         ];
 
         if ($fiscalYear !== null) {
@@ -59,12 +68,16 @@ class ReportController extends Controller
                 'journal' => $this->reportService->journalBook($company, $fiscalYear),
                 'ledger' => $this->reportService->generalLedger($company, $fiscalYear),
                 'consumption_tax' => $this->consumptionTaxReportService->aggregate($company, $fiscalYear),
+                'equity' => $this->equityStatementService->build($company, $fiscalYear),
             ];
         }
 
         return Inertia::render('reports/index', [
             'reports' => $reports,
             'hasActiveFiscalYear' => $fiscalYear !== null,
+            'openingBalanceConfirmed' => $fiscalYear !== null
+                ? $this->openingBalanceService->isConfirmed($company, $fiscalYear)
+                : false,
             'companyName' => $company->name,
             'fiscalYear' => $fiscalYear ? [
                 'start_date' => $fiscalYear->start_date->format('Y-m-d'),
@@ -82,6 +95,10 @@ class ReportController extends Controller
             abort(404);
         }
 
+        if ($type === 'statements' && $format === 'csv') {
+            abort(404);
+        }
+
         $company = $this->resolveCompany($request);
         $fiscalYear = $company->activeFiscalYear();
 
@@ -90,14 +107,51 @@ class ReportController extends Controller
         }
 
         $reportData = $this->resolveReportData($company, $fiscalYear, $type);
-        $meta = $this->reportMeta($company, $fiscalYear, $type);
         $filename = $this->buildFilename($company, $type, $format);
 
         if ($format === 'pdf') {
+            if ($type === 'statements') {
+                return $this->exportStatementsPdf($company, $fiscalYear, $filename);
+            }
+
+            $meta = $this->reportMeta($company, $fiscalYear, $type);
+
             return $this->exportPdf($type, $meta, $reportData, $filename);
         }
 
+        if ($type === 'statements') {
+            abort(404);
+        }
+
         return $this->exportCsv($type, $reportData, $filename);
+    }
+
+    public function updateEquity(UpdateEquityStatementRequest $request): RedirectResponse
+    {
+        $company = $this->resolveCompany($request);
+        $fiscalYear = $company->activeFiscalYear();
+
+        if ($fiscalYear === null) {
+            return back()->withErrors(['fiscal_year' => '会計期間が設定されていません。']);
+        }
+
+        $this->equityStatementService->saveManual($company, $fiscalYear, $request->validated('rows'));
+
+        return back()->with('success', '変動事由を保存しました。');
+    }
+
+    public function revertEquity(Request $request): RedirectResponse
+    {
+        $company = $this->resolveCompany($request);
+        $fiscalYear = $company->activeFiscalYear();
+
+        if ($fiscalYear === null) {
+            return back()->withErrors(['fiscal_year' => '会計期間が設定されていません。']);
+        }
+
+        $this->equityStatementService->revertToAuto($company, $fiscalYear);
+
+        return back()->with('success', '変動事由を自動計算に戻しました。');
     }
 
     private function exportPdf(string $type, array $meta, array $reportData, string $filename): Response
@@ -109,12 +163,42 @@ class ReportController extends Controller
             'bs' => 'reports.bs',
             'journal' => 'reports.journal',
             'ledger' => 'reports.ledger',
+            'equity' => 'reports.equity',
+            default => abort(404),
         };
 
         $pdf = Pdf::loadView($view, [
             'meta' => $meta,
             'report' => $reportData,
         ])->setPaper('a4', $meta['orientation']);
+
+        return $pdf->download($filename);
+    }
+
+    private function exportStatementsPdf(Company $company, FiscalYear $fiscalYear, string $filename): Response
+    {
+        $this->dompdfFontRegistrar->ensureJapaneseFontRegistered();
+
+        $pdf = Pdf::loadView('reports.statements', [
+            'shared' => $this->reportMeta($company, $fiscalYear, 'statements'),
+            'sections' => [
+                [
+                    'meta' => $this->reportMeta($company, $fiscalYear, 'pl'),
+                    'partial' => 'reports.partials.pl-body',
+                    'report' => $this->reportService->profitAndLoss($company, $fiscalYear),
+                ],
+                [
+                    'meta' => $this->reportMeta($company, $fiscalYear, 'bs'),
+                    'partial' => 'reports.partials.bs-body',
+                    'report' => $this->reportService->balanceSheet($company, $fiscalYear),
+                ],
+                [
+                    'meta' => $this->reportMeta($company, $fiscalYear, 'equity'),
+                    'partial' => 'reports.partials.equity-body',
+                    'report' => $this->equityStatementService->build($company, $fiscalYear),
+                ],
+            ],
+        ])->setPaper('a4', 'portrait');
 
         return $pdf->download($filename);
     }
@@ -131,6 +215,7 @@ class ReportController extends Controller
                 'journal' => $this->writeJournalCsv($handle, $reportData),
                 'ledger' => $this->writeLedgerCsv($handle, $reportData),
                 'consumption_tax' => $this->writeConsumptionTaxCsv($handle, $reportData),
+                'equity' => $this->writeEquityCsv($handle, $reportData),
             };
 
             fclose($handle);
@@ -246,6 +331,24 @@ class ReportController extends Controller
         fputcsv($handle, ['納付税額見込', $report['summary']['estimated_tax_payable']]);
     }
 
+    /**
+     * @param  resource  $handle
+     */
+    private function writeEquityCsv($handle, array $report): void
+    {
+        fputcsv($handle, ['区分', ...array_values($report['columns']), '株主資本合計']);
+        foreach ($report['rows'] as $row) {
+            fputcsv($handle, [
+                $row['label'],
+                $row['capital'],
+                $row['capital_surplus'],
+                $row['retained_earnings'],
+                $row['treasury'],
+                $row['total'],
+            ]);
+        }
+    }
+
     private function resolveReportData(Company $company, FiscalYear $fiscalYear, string $type): array
     {
         return match ($type) {
@@ -254,6 +357,8 @@ class ReportController extends Controller
             'journal' => $this->reportService->journalBook($company, $fiscalYear),
             'ledger' => $this->reportService->generalLedger($company, $fiscalYear),
             'consumption_tax' => $this->consumptionTaxReportService->aggregate($company, $fiscalYear),
+            'equity' => $this->equityStatementService->build($company, $fiscalYear),
+            'statements' => [],
         };
     }
 
@@ -274,7 +379,7 @@ class ReportController extends Controller
     {
         $startLabel = JapaneseDateFormatter::format($fiscalYear->start_date);
         $endLabel = JapaneseDateFormatter::format($fiscalYear->end_date);
-        $isLandscape = $type === 'ledger' || $type === 'journal';
+        $isLandscape = $type === 'ledger' || $type === 'journal' || $type === 'equity';
 
         return [
             'company_name' => $company->name,

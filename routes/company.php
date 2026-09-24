@@ -21,6 +21,8 @@ Route::middleware('auth')->group(function () {
         ->name('fiscal-year.store');
     Route::patch('settings/fiscal-year/{fiscalYear}', [FiscalYearSettingsController::class, 'update'])
         ->name('fiscal-year.update');
+    Route::post('settings/fiscal-year/{fiscalYear}/close', [FiscalYearSettingsController::class, 'close'])
+        ->name('fiscal-year.close');
 
     Route::get('settings/accounts', [AccountSettingsController::class, 'index'])
         ->name('accounts.edit');

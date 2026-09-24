@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\FiscalYear;
 use App\Models\User;
 use App\Services\ConsumptionTaxReportService;
+use App\Services\ConsumptionTaxService;
 use App\Services\JournalService;
 use Carbon\Carbon;
 use Database\Seeders\AccountSeeder;
@@ -47,10 +48,10 @@ class ConsumptionTaxReportServiceTest extends TestCase
 
     public function test_aggregate_groups_by_effective_category(): void
     {
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
         $expense = Account::where('name', '消耗品費')->firstOrFail();
-        $consumptionTaxService = app(\App\Services\ConsumptionTaxService::class);
+        $consumptionTaxService = app(ConsumptionTaxService::class);
 
         $this->journalService->createBalancedEntry(
             $this->company,
@@ -155,9 +156,9 @@ class ConsumptionTaxReportServiceTest extends TestCase
     {
         $this->company->update(['tax_entity_status' => 'exempt']);
 
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
-        $consumptionTaxService = app(\App\Services\ConsumptionTaxService::class);
+        $consumptionTaxService = app(ConsumptionTaxService::class);
 
         $this->journalService->createBalancedEntry(
             $this->company,

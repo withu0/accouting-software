@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/sidebar';
 import { getPathname, isNavItemActive, navItemActiveClassName, navSubItemActiveClassName } from '@/lib/nav';
 import { Link, usePage } from '@inertiajs/react';
-import { Calendar, ChevronRight, FileSpreadsheet, List, Percent, Receipt, Settings } from 'lucide-react';
+import { Calendar, ChevronRight, FileSpreadsheet, Landmark, List, Percent, Receipt, Settings } from 'lucide-react';
 
 // Post-MVP placeholders — re-enable when implemented
 // const disabledItems = [
@@ -21,6 +21,7 @@ import { Calendar, ChevronRight, FileSpreadsheet, List, Percent, Receipt, Settin
 
 const enabledItems = [
     { title: '臨時仕訳（振替伝票）', url: route('transfer-journal.index'), icon: Receipt },
+    { title: '開始残高', url: route('opening-balances.edit'), icon: Landmark },
     { title: '勘定科目設定', url: route('accounts.edit'), icon: FileSpreadsheet },
     { title: '会計期間設定', url: route('fiscal-year.edit'), icon: Calendar },
     { title: '消費税設定', url: route('consumption-tax.edit'), icon: Percent },

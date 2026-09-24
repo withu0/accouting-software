@@ -1,0 +1,1 @@
+function a(r){const e=new Intl.NumberFormat("ja-JP").format(Math.abs(r));return r<0?`△${e}`:e}function n(r){const e=r.replaceAll(/[¥,\s]/g,"").replaceAll("△","-").replaceAll("▲","-");if(e===""||e==="-")return 0;const t=Number.parseInt(e,10);return Number.isNaN(t)?0:t}export{a as f,n as p};

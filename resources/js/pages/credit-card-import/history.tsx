@@ -133,7 +133,7 @@ export default function CreditCardImportHistory({ imports }: Props) {
                                             <ProgressBar value={record.confirmed_count} max={record.row_count} />
                                         </TableCell>
                                         <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-                                            記帳 {record.confirmed_count} / 未処理 {record.pending_count} / スキップ{' '}
+                                            記帳 {record.confirmed_count} / 未処理 {record.pending_count} / プライベート{' '}
                                             {record.skipped_count}
                                         </TableCell>
                                         <TableCell className="text-right">

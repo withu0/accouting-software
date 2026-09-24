@@ -89,7 +89,7 @@ class ReportServiceTest extends TestCase
     {
         $ledger = $this->reportService->generalLedger($this->company, $this->fiscalYear);
 
-        $depositAccount = collect($ledger['accounts'])->firstWhere('account_name', '預金');
+        $depositAccount = collect($ledger['accounts'])->firstWhere('account_name', '普通預金');
         $this->assertNotNull($depositAccount);
         $this->assertSame(95000, $depositAccount['closing_balance']);
         $this->assertArrayHasKey('account_code', $depositAccount);
@@ -107,7 +107,7 @@ class ReportServiceTest extends TestCase
         ]);
 
         $consumptionTaxService = app(ConsumptionTaxService::class);
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
         $expense = Account::where('name', '会議費')->firstOrFail();
 
@@ -144,7 +144,7 @@ class ReportServiceTest extends TestCase
 
     private function seedSampleJournals(): void
     {
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
         $expense = Account::where('name', '消耗品費')->firstOrFail();
         $officerLoan = Account::findByName('役員借入金');

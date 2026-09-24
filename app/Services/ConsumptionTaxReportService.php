@@ -250,7 +250,7 @@ class ConsumptionTaxReportService
     {
         foreach ($entry->lines as $line) {
             $name = $line->account?->name;
-            if ($name === '預金') {
+            if (in_array($name, ['普通預金', '当座預金', '現金'], true)) {
                 return max($line->debit, $line->credit);
             }
             if ($name === '役員借入金' && $line->credit > 0) {

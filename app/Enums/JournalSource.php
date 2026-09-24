@@ -9,4 +9,5 @@ enum JournalSource: string
     case AdvanceExpense = 'advance_expense';
     case Transfer = 'transfer';
     case Manual = 'manual';
+    case OpeningBalance = 'opening_balance';
 }

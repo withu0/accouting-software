@@ -1,4 +1,6 @@
 import { EmptyState } from '@/components/empty-state';
+import { EquityStatementPanel } from '@/components/equity-statement-panel';
+import { FlashAlert } from '@/components/flash-alert';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
 import { ReportDocument, ReportSection } from '@/components/report-document';
@@ -8,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { formatDate } from '@/lib/dates';
+import { formatYen } from '@/lib/yen';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -18,7 +21,9 @@ import {
     CalendarDays,
     FileSpreadsheet,
     FileText,
+    Landmark,
     Layers,
+    Printer,
     Receipt,
     Scale,
     TrendingUp,
@@ -114,17 +119,47 @@ interface ConsumptionTaxReport {
     };
 }
 
+interface EquityStatementReport {
+    columns: Record<string, string>;
+    rows: Array<{
+        label: string;
+        kind: string;
+        capital: number;
+        capital_surplus: number;
+        retained_earnings: number;
+        treasury: number;
+        total: number;
+    }>;
+    is_consistent: boolean;
+    mismatches: Array<{
+        account_name: string;
+        statement_amount: number;
+        bs_amount: number;
+        difference: number;
+    }>;
+    is_manual: boolean;
+    editable_rows: Array<{
+        label: string;
+        capital: number;
+        capital_surplus: number;
+        retained_earnings: number;
+        treasury: number;
+    }>;
+}
+
 interface Reports {
     pl: ProfitAndLossReport | null;
     bs: BalanceSheetReport | null;
     journal: JournalBookReport | null;
     ledger: GeneralLedgerReport | null;
     consumption_tax: ConsumptionTaxReport | null;
+    equity: EquityStatementReport | null;
 }
 
 interface Props {
     reports: Reports;
     hasActiveFiscalYear: boolean;
+    openingBalanceConfirmed: boolean;
     companyName: string | null;
     fiscalYear: { start_date: string; end_date: string } | null;
 }
@@ -137,18 +172,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 const tabs = [
     { id: 'pl', label: '損益計算書', icon: TrendingUp },
     { id: 'bs', label: '貸借対照表', icon: Scale },
+    { id: 'equity', label: '株主資本等変動計算書', icon: Landmark },
     { id: 'journal', label: '仕訳帳', icon: BookOpen },
     { id: 'ledger', label: '総勘定元帳', icon: Layers },
     { id: 'consumption_tax', label: '消費税区分集計', icon: Receipt },
 ] as const;
 
 function formatAmount(amount: number): string {
-    return new Intl.NumberFormat('ja-JP').format(amount);
+    return formatYen(amount);
 }
 
 function ExportButtons({ type }: { type: string }) {
     return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
             {type !== 'consumption_tax' && (
                 <Button size="sm" asChild>
                     <a href={route('reports.export', { type, format: 'pdf' })}>
@@ -163,11 +199,21 @@ function ExportButtons({ type }: { type: string }) {
                     CSV出力
                 </a>
             </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
+                <Printer className="size-4" />
+                印刷
+            </Button>
         </div>
     );
 }
 
-export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName, fiscalYear }: Props) {
+export default function ReportsIndex({
+    reports,
+    hasActiveFiscalYear,
+    openingBalanceConfirmed,
+    companyName,
+    fiscalYear,
+}: Props) {
     const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('pl');
     const isTaxExempt = reports.consumption_tax?.is_tax_exempt === true;
 
@@ -179,7 +225,22 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="決算書出力" />
             <PageContainer size="full">
-                <PageHeader title="決算書出力" description="損益計算書・貸借対照表などの決算書類を確認・出力します" />
+                <PageHeader
+                    title="決算書出力"
+                    description="損益計算書・貸借対照表・株主資本等変動計算書などの決算書類を確認・出力します"
+                    actions={
+                        hasActiveFiscalYear ? (
+                            <Button asChild>
+                                <a href={route('reports.export', { type: 'statements', format: 'pdf' })}>
+                                    <FileText className="size-4" />
+                                    決算書一括PDF
+                                </a>
+                            </Button>
+                        ) : undefined
+                    }
+                />
+
+                <FlashAlert />
 
                 <div className="grid gap-4 sm:grid-cols-2">
                     <StatCard label="会社" icon={Building2}>
@@ -203,8 +264,21 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
                     </Alert>
                 )}
 
+                {hasActiveFiscalYear && !openingBalanceConfirmed && (
+                    <Alert>
+                        <AlertCircle className="size-4" />
+                        <AlertDescription>
+                            前期残高が未設定です。貸借対照表の期首残高を反映するには
+                            <Link href={route('opening-balances.edit')} className="mx-1 underline">
+                                開始残高
+                            </Link>
+                            から入力してください。
+                        </AlertDescription>
+                    </Alert>
+                )}
+
                 <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-                    <nav className="surface-card space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
+                    <nav className="surface-card space-y-1 p-2 print:hidden lg:sticky lg:top-20 lg:self-start">
                         {tabs.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = activeTab === tab.id;
@@ -331,6 +405,22 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
                             </ReportDocument>
                         )}
 
+                        {activeTab === 'equity' && (
+                            <ReportDocument
+                                companyName={displayCompanyName}
+                                periodLabel={periodLabel}
+                                title="株主資本等変動計算書"
+                                description="期首残高と当期純利益は自動反映されます。増資・配当などは仕訳から判定し、必要なら変動事由を修正できます。"
+                                toolbar={hasActiveFiscalYear ? <ExportButtons type="equity" /> : undefined}
+                            >
+                                {reports.equity ? (
+                                    <EquityStatementPanel report={reports.equity} />
+                                ) : (
+                                    <EmptyReport />
+                                )}
+                            </ReportDocument>
+                        )}
+
                         {activeTab === 'journal' && (
                             <ReportDocument
                                 companyName={displayCompanyName}
@@ -404,6 +494,15 @@ export default function ReportsIndex({ reports, hasActiveFiscalYear, companyName
                                                             </tr>
                                                         </thead>
                                                         <tbody>
+                                                            <tr className="border-b hover:bg-muted/30">
+                                                                <td className="px-4 py-2.5"></td>
+                                                                <td className="px-4 py-2.5">繰越残高</td>
+                                                                <td className="px-4 py-2.5"></td>
+                                                                <td className="px-4 py-2.5"></td>
+                                                                <td className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums">
+                                                                    {formatAmount(account.opening_balance)}
+                                                                </td>
+                                                            </tr>
                                                             {account.lines.map((line, index) => (
                                                                 <tr key={index} className="border-b last:border-0 hover:bg-muted/30">
                                                                     <td className="px-4 py-2.5 whitespace-nowrap">

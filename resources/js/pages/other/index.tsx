@@ -5,7 +5,7 @@ import { SectionHeader } from '@/components/section-header';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Calendar, FileSpreadsheet, Percent, Receipt } from 'lucide-react';
+import { Calendar, FileSpreadsheet, Landmark, Percent, Receipt } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'ホーム', href: route('home') },
@@ -18,6 +18,12 @@ const journalItems = [
         description: '例外処理の仕訳を入力します',
         icon: Receipt,
         href: route('transfer-journal.index'),
+    },
+    {
+        title: '開始残高',
+        description: '前期BSを入力し、今期の繰越残高にします',
+        icon: Landmark,
+        href: route('opening-balances.edit'),
     },
 ];
 

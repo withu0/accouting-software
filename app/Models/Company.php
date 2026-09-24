@@ -71,4 +71,9 @@ class Company extends Model
     {
         return $this->hasMany(CreditCardImport::class);
     }
+
+    public function openingBalances(): HasMany
+    {
+        return $this->hasMany(OpeningBalance::class);
+    }
 }

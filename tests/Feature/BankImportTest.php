@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AccountType;
 use App\Enums\BankImportRowStatus;
 use App\Enums\JournalSource;
 use App\Models\Account;
@@ -15,6 +16,7 @@ use Database\Seeders\DescriptionRuleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia as Assert;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\ConsumptionTaxPayload;
 use Tests\TestCase;
 
@@ -82,7 +84,7 @@ class BankImportTest extends TestCase
             ])
             ->assertRedirect();
 
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
         $revenueAccount = Account::where('name', '売上高')->firstOrFail();
         $outputTaxAccount = Account::where('name', '仮受消費税')->firstOrFail();
 
@@ -132,7 +134,7 @@ class BankImportTest extends TestCase
             ])
             ->assertRedirect();
 
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
         $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
 
         $entry = $this->company->journalEntries()->where('description', 'Amazon.co.jp')->first();
@@ -583,7 +585,7 @@ CSV;
         $this->assertEquals('2025-04-05', $entry->entry_date->format('Y-m-d'));
         $this->assertEquals(8000, $row->withdrawal_amount);
 
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
         $inputTaxAccount = Account::where('name', '仮払消費税')->firstOrFail();
 
         $this->assertDatabaseHas('journal_lines', [
@@ -611,7 +613,7 @@ CSV;
         $otherRevenue = Account::create([
             'code' => '4102',
             'name' => '雑収入',
-            'type' => \App\Enums\AccountType::Revenue,
+            'type' => AccountType::Revenue,
             'display_order' => 22,
         ]);
 
@@ -816,7 +818,7 @@ CSV;
         ];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('bankSampleFileProvider')]
+    #[DataProvider('bankSampleFileProvider')]
     public function test_uploads_multi_bank_sample_files(string $filename, int $expectedRows, string $expectedFormat): void
     {
         $content = file_get_contents(base_path("samples/bank-csv-samples/{$filename}"));

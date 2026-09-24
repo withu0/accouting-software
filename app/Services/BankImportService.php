@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Enums\ConsumptionTaxCategory;
+use App\Enums\BankCsvFormat;
 use App\Enums\BankImportRowStatus;
 use App\Enums\BankImportStatus;
-use App\Enums\BankCsvFormat;
+use App\Enums\ConsumptionTaxCategory;
 use App\Enums\JournalSource;
 use App\Models\Account;
 use App\Models\BankImport;
@@ -370,7 +370,7 @@ class BankImportService
     {
         $entry->loadMissing('lines.account');
 
-        $excludedNames = ['預金', '仮払消費税', '仮受消費税'];
+        $excludedNames = ['普通預金', '当座預金', '現金', '仮払消費税', '仮受消費税'];
 
         foreach ($entry->lines as $line) {
             if (in_array($line->account->name, $excludedNames, true)) {
@@ -402,7 +402,7 @@ class BankImportService
             return $existingEntry;
         }
 
-        $depositAccount = Account::findByName('預金');
+        $depositAccount = Account::findByName('普通預金');
         $entryDate = Carbon::parse($row->transaction_date);
 
         if ($row->deposit_amount > 0) {
@@ -475,7 +475,7 @@ class BankImportService
      */
     private function buildRevenueJournalLines(Company $company, Carbon $entryDate, int $amount, int $revenueAccountId, array $options): array
     {
-        $depositAccount = Account::findByName('預金');
+        $depositAccount = Account::findByName('普通預金');
         $baseCategory = $this->resolveBaseCategory($options, $company);
         $effectiveCategory = $this->consumptionTaxService->resolveEffectiveCategory($baseCategory, null, $entryDate);
 
@@ -495,7 +495,7 @@ class BankImportService
      */
     private function buildExpenseJournalLines(Company $company, Carbon $entryDate, int $amount, int $expenseAccountId, array $options): array
     {
-        $depositAccount = Account::findByName('預金');
+        $depositAccount = Account::findByName('普通預金');
         $baseCategory = $this->resolveBaseCategory($options, $company);
         $hasQualifiedInvoice = $company->isTaxExempt()
             ? null

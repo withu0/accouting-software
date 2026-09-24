@@ -40,7 +40,7 @@ class ReportControllerTest extends TestCase
             'is_active' => true,
         ]);
 
-        $deposit = Account::findByName('預金');
+        $deposit = Account::findByName('普通預金');
         $revenue = Account::findByName('売上高');
 
         $entry = JournalEntry::create([
@@ -112,6 +112,8 @@ class ReportControllerTest extends TestCase
             'bs' => ['bs'],
             'journal' => ['journal'],
             'ledger' => ['ledger'],
+            'equity' => ['equity'],
+            'statements' => ['statements'],
         ];
     }
 
@@ -148,6 +150,51 @@ class ReportControllerTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('reports.export', ['type' => 'consumption_tax', 'format' => 'pdf']))
             ->assertNotFound();
+    }
+
+    public function test_combined_statements_csv_export_returns_404(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('reports.export', ['type' => 'statements', 'format' => 'csv']))
+            ->assertNotFound();
+    }
+
+    public function test_equity_manual_rows_can_be_saved_and_reverted(): void
+    {
+        $this->actingAs($this->user)
+            ->put(route('reports.equity.update'), [
+                'rows' => [
+                    [
+                        'label' => '剰余金の配当',
+                        'capital' => 0,
+                        'capital_surplus' => 0,
+                        'retained_earnings' => -10000,
+                        'treasury' => 0,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($this->user)
+            ->get(route('reports'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('reports/index')
+                ->where('reports.equity.is_manual', true)
+                ->where('reports.equity.editable_rows.0.label', '剰余金の配当')
+                ->where('reports.equity.editable_rows.0.retained_earnings', -10000)
+            );
+
+        $this->actingAs($this->user)
+            ->delete(route('reports.equity.revert'))
+            ->assertRedirect();
+
+        $this->actingAs($this->user)
+            ->get(route('reports'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('reports.equity.is_manual', false)
+            );
     }
 
     public function test_invalid_report_type_returns_404(): void

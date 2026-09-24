@@ -25,7 +25,7 @@ const menuItems = [
     },
     {
         title: 'クレジットカードCSV取込',
-        description: 'カード明細を取り込み、経費 / 未払金で仕訳します',
+        description: 'カード明細を取り込み、経費 / 役員借入金で仕訳します',
         href: route('credit-card-import'),
         icon: CreditCard,
     },
@@ -37,13 +37,13 @@ const menuItems = [
     },
     {
         title: '決算書出力',
-        description: '損益計算書・貸借対照表などを出力します',
+        description: '損益計算書・貸借対照表・株主資本等変動計算書を出力します',
         href: route('reports'),
         icon: FileText,
     },
     {
         title: 'その他',
-        description: '振替伝票・会計期間設定など',
+        description: '振替伝票・開始残高・会計期間設定など',
         href: route('other'),
         icon: Settings,
     },

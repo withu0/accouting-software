@@ -187,12 +187,26 @@ class CreditCardImportController extends Controller
         $pendingCount = $row->creditCardImport->rows()->where('status', CreditCardImportRowStatus::Pending)->count();
 
         if ($pendingCount > 0) {
-            return back()->with('success', '取引をスキップしました。');
+            return back()->with('success', 'プライベートとして仕訳しないようにしました。');
         }
 
         return redirect()
             ->route('credit-card-import')
             ->with('success', 'すべての取引の処理が完了しました。');
+    }
+
+    public function unskipRow(Request $request, CreditCardImportRow $row): RedirectResponse
+    {
+        $company = $this->resolveCompany($request);
+        $this->authorizeImport($company, $row->creditCardImport);
+
+        try {
+            $this->creditCardImportService->unskipRow($company, $row);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['row' => $e->getMessage()]);
+        }
+
+        return back()->with('success', '経費として登録できる状態に戻しました。');
     }
 
     public function history(Request $request): Response
@@ -237,7 +251,7 @@ class CreditCardImportController extends Controller
             ->orderBy('transaction_date')
             ->orderBy('id')
             ->get()
-            ->map(function (CreditCardImportRow $row) use ($company) {
+            ->map(function (CreditCardImportRow $row) {
                 $accountId = null;
 
                 if ($row->status === CreditCardImportRowStatus::Confirmed && $row->journalEntry !== null) {

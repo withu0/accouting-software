@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AccountType;
+use App\Enums\JournalSource;
 use App\Models\Company;
 use App\Models\FiscalYear;
 use App\Models\JournalEntry;
@@ -14,7 +15,8 @@ class ReportService
     /**
      * MVP: No opening balance entries are assumed for the first fiscal year.
      * Net income is shown as 当期純利益 on the equity side of the balance sheet
-     * rather than posting a closing entry to 元入金.
+     * Net income is shown as 当期純利益 on the equity side of the balance sheet
+     * rather than posting a closing entry to 繰越利益剰余金 during the year.
      */
     public function profitAndLoss(Company $company, FiscalYear $fiscalYear): array
     {
@@ -118,6 +120,7 @@ class ReportService
                 'accounts.type as account_type',
                 'journal_entries.entry_date',
                 'journal_entries.description',
+                'journal_entries.source',
                 'journal_lines.debit',
                 'journal_lines.credit',
             ])
@@ -141,8 +144,17 @@ class ReportService
             }
 
             $accountType = AccountType::from($line->account_type);
+            $movement = $this->signedMovement($accountType, (int) $line->debit, (int) $line->credit);
+
+            if ($line->source === JournalSource::OpeningBalance->value) {
+                $accounts[$accountId]['opening_balance'] += $movement;
+                $accounts[$accountId]['closing_balance'] += $movement;
+
+                continue;
+            }
+
             $runningBalance = $accounts[$accountId]['closing_balance'];
-            $runningBalance += $this->signedMovement($accountType, (int) $line->debit, (int) $line->credit);
+            $runningBalance += $movement;
 
             $accounts[$accountId]['lines'][] = [
                 'entry_date' => $line->entry_date,

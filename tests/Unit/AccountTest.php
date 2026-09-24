@@ -22,9 +22,9 @@ class AccountTest extends TestCase
 
     public function test_find_by_name_returns_matching_account(): void
     {
-        $account = Account::findByName('預金');
+        $account = Account::findByName('普通預金');
 
-        $this->assertEquals('預金', $account->name);
+        $this->assertEquals('普通預金', $account->name);
         $this->assertEquals(AccountType::Asset, $account->type);
     }
 

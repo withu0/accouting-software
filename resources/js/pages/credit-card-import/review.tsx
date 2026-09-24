@@ -401,7 +401,7 @@ export default function CreditCardImportReview({
                                                         }
                                                     />
                                                     <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
-                                                        スキップ
+                                                        仕訳しない（プライベート）
                                                     </Button>
                                                 </div>
                                             </TableCell>

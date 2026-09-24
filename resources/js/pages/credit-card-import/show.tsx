@@ -59,7 +59,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const statusLabels: Record<string, string> = {
     pending: '未記帳',
     confirmed: '記帳済',
-    skipped: 'スキップ',
+    skipped: 'プライベート',
 };
 
 function formatAmount(amount: number): string {
@@ -95,6 +95,10 @@ export default function CreditCardImportShow({
         router.post(route('credit-card-import.rows.skip', rowId), {}, { preserveScroll: true });
     };
 
+    const handleUnskip = (rowId: number) => {
+        router.post(route('credit-card-import.rows.unskip', rowId), {}, { preserveScroll: true });
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="取込詳細" />
@@ -121,7 +125,7 @@ export default function CreditCardImportShow({
                         { label: '全件', value: `${rows.length}件` },
                         { label: '記帳済', value: `${counts.confirmed ?? 0}件`, variant: 'success' },
                         { label: '未記帳', value: `${pendingCount}件`, variant: pendingCount > 0 ? 'warning' : 'default' },
-                        { label: 'スキップ', value: `${counts.skipped ?? 0}件` },
+                        { label: 'プライベート', value: `${counts.skipped ?? 0}件` },
                         ...(creditCardImport.card_name ? [{ label: 'カード', value: creditCardImport.card_name }] : []),
                     ]}
                 />
@@ -178,7 +182,12 @@ export default function CreditCardImportShow({
                                             )}
                                             {row.status === 'pending' && (
                                                 <Button type="button" variant="ghost" size="sm" onClick={() => handleSkip(row.id)}>
-                                                    スキップ
+                                                    仕訳しない（プライベート）
+                                                </Button>
+                                            )}
+                                            {row.status === 'skipped' && (
+                                                <Button type="button" variant="ghost" size="sm" onClick={() => handleUnskip(row.id)}>
+                                                    経費として登録し直す
                                                 </Button>
                                             )}
                                             {row.status === 'confirmed' && row.journal_entry_id !== null && (

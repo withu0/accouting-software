@@ -68,7 +68,7 @@ class JournalListingTest extends TestCase
 
     public function test_journal_listing_shows_entries_for_active_fiscal_year_only(): void
     {
-        $depositAccount = Account::findByName('預金');
+        $depositAccount = Account::findByName('普通預金');
         $revenueAccount = Account::findByName('売上高');
 
         $activeEntry = JournalEntry::create([
@@ -123,10 +123,10 @@ class JournalListingTest extends TestCase
                 ->has('entries.data', 1)
                 ->where('entries.data.0.description', '売上入金')
                 ->where('entries.data.0.total_amount', 100000)
-                ->where('entries.data.0.debit_account_name', '預金')
+                ->where('entries.data.0.debit_account_name', '普通預金')
                 ->where('entries.data.0.credit_account_name', '売上高')
                 ->has('entries.data.0.lines', 2)
-                ->where('entries.data.0.lines.0.account_name', '預金')
+                ->where('entries.data.0.lines.0.account_name', '普通預金')
                 ->where('entries.data.0.lines.0.debit', 100000)
                 ->where('entries.data.0.lines.1.account_name', '売上高')
                 ->where('entries.data.0.lines.1.credit', 100000)

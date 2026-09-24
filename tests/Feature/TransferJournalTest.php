@@ -351,7 +351,7 @@ class TransferJournalTest extends TestCase
     {
         $presets = TransferJournalController::resolvePresets();
 
-        $this->assertCount(7, $presets);
+        $this->assertCount(9, $presets);
 
         foreach ($presets as $preset) {
             $this->assertNotEmpty($preset['id']);

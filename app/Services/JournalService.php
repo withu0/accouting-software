@@ -7,6 +7,7 @@ use App\Enums\JournalSource;
 use App\Exceptions\UnbalancedJournalException;
 use App\Models\Account;
 use App\Models\Company;
+use App\Models\FiscalYear;
 use App\Models\JournalEntry;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -26,14 +27,12 @@ class JournalService
         ?string $idempotencyKey = null,
         ?ConsumptionTaxCategory $consumptionTaxCategory = null,
         ?bool $hasQualifiedInvoice = null,
+        ?FiscalYear $fiscalYear = null,
     ): JournalEntry {
         $this->validateLines($lines);
         $this->validateIdempotencyKey($company, $idempotencyKey);
 
-        $fiscalYear = $company->activeFiscalYear();
-        if ($fiscalYear === null) {
-            throw new InvalidArgumentException('No active fiscal year configured for this company.');
-        }
+        $fiscalYear = $this->resolveFiscalYear($company, $fiscalYear);
 
         if ($entryDate->lt($fiscalYear->start_date) || $entryDate->gt($fiscalYear->end_date)) {
             throw new InvalidArgumentException('日付は会計期間内である必要があります。');
@@ -81,13 +80,11 @@ class JournalService
         array $lines,
         ?ConsumptionTaxCategory $consumptionTaxCategory = null,
         ?bool $hasQualifiedInvoice = null,
+        ?FiscalYear $fiscalYear = null,
     ): JournalEntry {
         $this->validateLines($lines);
 
-        $fiscalYear = $company->activeFiscalYear();
-        if ($fiscalYear === null) {
-            throw new InvalidArgumentException('No active fiscal year configured for this company.');
-        }
+        $fiscalYear = $this->resolveFiscalYear($company, $fiscalYear);
 
         if ($entryDate->lt($fiscalYear->start_date) || $entryDate->gt($fiscalYear->end_date)) {
             throw new InvalidArgumentException('日付は会計期間内である必要があります。');
@@ -167,5 +164,20 @@ class JournalService
         if ($exists) {
             throw new InvalidArgumentException('A journal entry with this idempotency key already exists.');
         }
+    }
+
+    private function resolveFiscalYear(Company $company, ?FiscalYear $fiscalYear): FiscalYear
+    {
+        $fiscalYear ??= $company->activeFiscalYear();
+
+        if ($fiscalYear === null) {
+            throw new InvalidArgumentException('No active fiscal year configured for this company.');
+        }
+
+        if ($fiscalYear->company_id !== $company->id) {
+            throw new InvalidArgumentException('Fiscal year does not belong to this company.');
+        }
+
+        return $fiscalYear;
     }
 }

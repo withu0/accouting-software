@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class Account extends Model
 {
@@ -17,6 +18,7 @@ class Account extends Model
         'name',
         'type',
         'display_order',
+        'is_contra',
         'default_consumption_tax_category',
     ];
 
@@ -25,8 +27,27 @@ class Account extends Model
         return [
             'type' => AccountType::class,
             'display_order' => 'integer',
+            'is_contra' => 'boolean',
             'default_consumption_tax_category' => ConsumptionTaxCategory::class,
         ];
+    }
+
+    public function normalBalanceIsDebit(): bool
+    {
+        $isDebitType = in_array($this->type, [AccountType::Asset, AccountType::Expense], true);
+
+        return $this->is_contra ? ! $isDebitType : $isDebitType;
+    }
+
+    /**
+     * @return Collection<int, self>
+     */
+    public static function balanceSheetAccounts(): Collection
+    {
+        return self::query()
+            ->whereIn('type', [AccountType::Asset->value, AccountType::Liability->value, AccountType::Equity->value])
+            ->orderBy('display_order')
+            ->get();
     }
 
     public function scopeOfType(Builder $query, AccountType $type): Builder
@@ -163,6 +184,10 @@ class Account extends Model
         }
 
         if (DB::table('bank_import_rows')->where('suggested_account_id', $this->id)->exists()) {
+            return true;
+        }
+
+        if (Schema::hasTable('opening_balance_lines') && DB::table('opening_balance_lines')->where('account_id', $this->id)->exists()) {
             return true;
         }
 

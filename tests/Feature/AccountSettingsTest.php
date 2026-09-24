@@ -102,7 +102,7 @@ class AccountSettingsTest extends TestCase
         ]);
 
         $expenseAccount = Account::where('name', '消耗品費')->firstOrFail();
-        $depositAccount = Account::where('name', '預金')->firstOrFail();
+        $depositAccount = Account::where('name', '普通預金')->firstOrFail();
 
         $entry = JournalEntry::create([
             'company_id' => $company->id,
