@@ -811,6 +811,7 @@ CSV;
         return [
             'native april' => ['native-2025-04.csv', 10, 'native'],
             'gmo native april' => ['gmo-native-2025-04.csv', 5, 'gmo_native'],
+            'gmo native statement' => ['gmo-native-statement.csv', 5, 'gmo_native'],
             'rakuten april' => ['rakuten-2025-04.csv', 5, 'rakuten'],
             'sbi april' => ['sbi-2025-04.csv', 5, 'sbi_sumishin'],
             'gmo zengin csv april' => ['gmo-zengin-csv-2025-04.csv', 5, 'gmo_zengin_csv'],

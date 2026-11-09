@@ -11,6 +11,12 @@ class NativeCsvAdapter implements BankCsvFormatAdapter
 {
     private const REQUIRED_HEADERS = ['日付', '摘要', '入金額', '出金額', '残高'];
 
+    /** @var array<string, list<string>> */
+    protected const AMOUNT_ALIASES = [
+        '入金額' => ['入金金額'],
+        '出金額' => ['出金金額'],
+    ];
+
     public function __construct(
         protected readonly BankCsvRowBuilder $builder,
         private readonly BankCsvFormat $format = BankCsvFormat::Native,
@@ -23,14 +29,12 @@ class NativeCsvAdapter implements BankCsvFormatAdapter
 
     public function matches(array $lines): bool
     {
-        $header = $this->builder->findHeaderRow($lines, self::REQUIRED_HEADERS);
-
-        return $header !== null;
+        return $this->findHeader($lines) !== null;
     }
 
     public function parse(array $lines): array
     {
-        $headerInfo = $this->builder->findHeaderRow($lines, self::REQUIRED_HEADERS);
+        $headerInfo = $this->findHeader($lines);
         if ($headerInfo === null) {
             throw new InvalidArgumentException('CSV is missing required header columns.');
         }
@@ -81,5 +85,14 @@ class NativeCsvAdapter implements BankCsvFormatAdapter
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<int, string>  $lines
+     * @return array{index: int, headers: array<int, string>}|null
+     */
+    protected function findHeader(array $lines): ?array
+    {
+        return $this->builder->findHeaderRow($lines, self::REQUIRED_HEADERS, self::AMOUNT_ALIASES);
     }
 }

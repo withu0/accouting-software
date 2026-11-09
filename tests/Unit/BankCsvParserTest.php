@@ -51,6 +51,28 @@ CSV;
         $this->assertEquals(0, $rows[1]['deposit_amount']);
     }
 
+    public function test_parses_gmo_statement_csv_with_compact_dates(): void
+    {
+        $csv = <<<'CSV'
+"日付","摘要","入金金額","出金金額","残高","メモ"
+"20250401","振込 カ）ABC商事","250000","","2250000",""
+"20250405","Amazon.co.jp","","12800","2237200",""
+"20260601","普通預金 利息","78","","2237278",""
+CSV;
+
+        $result = $this->parser->parse($csv);
+
+        $this->assertSame(BankCsvFormat::GmoNative, $result['format']);
+        $this->assertCount(3, $result['rows']);
+        $this->assertSame('2025-04-01', $result['rows'][0]['transaction_date']->format('Y-m-d'));
+        $this->assertSame(250000, $result['rows'][0]['deposit_amount']);
+        $this->assertSame(0, $result['rows'][0]['withdrawal_amount']);
+        $this->assertSame('2025-04-05', $result['rows'][1]['transaction_date']->format('Y-m-d'));
+        $this->assertSame(12800, $result['rows'][1]['withdrawal_amount']);
+        $this->assertSame('2026-06-01', $result['rows'][2]['transaction_date']->format('Y-m-d'));
+        $this->assertSame('普通預金 利息', $result['rows'][2]['description']);
+    }
+
     public function test_rejects_unrecognized_format(): void
     {
         $this->expectException(InvalidArgumentException::class);

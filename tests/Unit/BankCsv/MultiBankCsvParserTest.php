@@ -37,6 +37,7 @@ class MultiBankCsvParserTest extends TestCase
             'native may' => ['native-2025-05.csv', BankCsvFormat::Native, 8],
             'gmo native april' => ['gmo-native-2025-04.csv', BankCsvFormat::GmoNative, 5],
             'gmo native may' => ['gmo-native-2025-05.csv', BankCsvFormat::GmoNative, 4],
+            'gmo native statement' => ['gmo-native-statement.csv', BankCsvFormat::GmoNative, 5],
             'rakuten april' => ['rakuten-2025-04.csv', BankCsvFormat::Rakuten, 5],
             'rakuten may' => ['rakuten-2025-05.csv', BankCsvFormat::Rakuten, 4],
             'sbi april' => ['sbi-2025-04.csv', BankCsvFormat::SbiSumishin, 5],

@@ -53,6 +53,17 @@ CSV;
 writeShiftJis("{$base}/gmo-native-2025-04.csv", $gmoNativeApril);
 writeShiftJis("{$base}/gmo-native-2025-05.csv", $gmoNativeMay);
 
+$gmoStatement = <<<'CSV'
+"日付","摘要","入金金額","出金金額","残高","メモ"
+"20250401","振込 カ）ABC商事","250000","","2250000",""
+"20250405","Amazon.co.jp","","12800","2237200",""
+"20250408","JR東日本 出張","","4520","2232680",""
+"20250415","振込 カ）山田デザイン","180000","","2403880",""
+"20250422","普通預金 利息","78","","2403958",""
+CSV;
+
+writeShiftJis("{$base}/gmo-native-statement.csv", $gmoStatement);
+
 $rakutenApril = <<<'CSV'
 取引日,入出金(円),残高(円),入出金先内容
 2025/04/01,250000,2250000,振込 カ）ABC商事

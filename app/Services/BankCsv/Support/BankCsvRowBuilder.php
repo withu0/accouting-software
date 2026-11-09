@@ -22,6 +22,15 @@ class BankCsvRowBuilder
             throw new InvalidArgumentException("Row {$rowNumber} is missing date.");
         }
 
+        if (preg_match('/^\d{8}$/', $value)) {
+            $year = (int) substr($value, 0, 4);
+            $month = (int) substr($value, 4, 2);
+            $day = (int) substr($value, 6, 2);
+            if (checkdate($month, $day, $year)) {
+                return Carbon::create($year, $month, $day)->startOfDay();
+            }
+        }
+
         if (preg_match('/^\d{6}$/', $value)) {
             return ZenginDateParser::parse($value);
         }
@@ -153,9 +162,11 @@ class BankCsvRowBuilder
 
     /**
      * @param  array<int, string>  $lines
+     * @param  list<string>  $requiredHeaders
+     * @param  array<string, list<string>>  $aliases
      * @return array{index: int, headers: array<int, string>}|null
      */
-    public function findHeaderRow(array $lines, array $requiredHeaders): ?array
+    public function findHeaderRow(array $lines, array $requiredHeaders, array $aliases = []): ?array
     {
         foreach ($lines as $index => $line) {
             $line = trim($line);
@@ -163,12 +174,30 @@ class BankCsvRowBuilder
                 continue;
             }
 
-            $headers = $this->parseCsvLine($line);
+            $headers = array_map(
+                fn (string $header) => $this->canonicalizeHeader(trim($header), $aliases),
+                $this->parseCsvLine($line),
+            );
+
             if ($this->hasHeaders($headers, $requiredHeaders)) {
                 return ['index' => $index, 'headers' => $headers];
             }
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, list<string>>  $aliases
+     */
+    private function canonicalizeHeader(string $header, array $aliases): string
+    {
+        foreach ($aliases as $canonical => $names) {
+            if ($header === $canonical || in_array($header, $names, true)) {
+                return $canonical;
+            }
+        }
+
+        return $header;
     }
 }
