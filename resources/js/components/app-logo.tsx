@@ -12,7 +12,6 @@ export default function AppLogo() {
             </div>
             <div className="ml-2 grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate text-sm font-bold tracking-tight">{name}</span>
-                <span className="text-muted-foreground truncate text-[11px] font-medium tracking-wide">会計ソフト</span>
             </div>
         </>
     );
