@@ -16,6 +16,7 @@ class Company extends Model
         'name',
         'representative_name',
         'address',
+        'invoice_registration_number',
         'fiscal_year_start_month',
         'consumption_tax_method',
         'simplified_tax_industry',
@@ -75,5 +76,10 @@ class Company extends Model
     public function openingBalances(): HasMany
     {
         return $this->hasMany(OpeningBalance::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
     }
 }

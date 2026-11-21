@@ -153,4 +153,44 @@ class CompanySettingsTest extends TestCase
             ->get(route('consumption-tax.edit'))
             ->assertOk();
     }
+
+    public function test_user_can_save_invoice_registration_number(): void
+    {
+        $user = User::factory()->create();
+        Company::create(['user_id' => $user->id]);
+
+        $this->actingAs($user)->patch(route('company.update'), [
+            'invoice_registration_number' => 't1234567890123',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('companies', [
+            'user_id' => $user->id,
+            'invoice_registration_number' => 'T1234567890123',
+        ]);
+    }
+
+    public function test_invoice_registration_number_must_be_t_plus_13_digits(): void
+    {
+        $user = User::factory()->create();
+        Company::create(['user_id' => $user->id]);
+
+        $this->actingAs($user)->patch(route('company.update'), [
+            'invoice_registration_number' => 'T123',
+        ])->assertSessionHasErrors('invoice_registration_number');
+    }
+
+    public function test_blank_invoice_registration_number_is_cleared(): void
+    {
+        $user = User::factory()->create();
+        $company = Company::create([
+            'user_id' => $user->id,
+            'invoice_registration_number' => 'T1234567890123',
+        ]);
+
+        $this->actingAs($user)->patch(route('company.update'), [
+            'invoice_registration_number' => '',
+        ])->assertRedirect();
+
+        $this->assertNull($company->fresh()->invoice_registration_number);
+    }
 }

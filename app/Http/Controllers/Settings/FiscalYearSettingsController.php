@@ -35,6 +35,7 @@ class FiscalYearSettingsController extends Controller
                 'name' => $company->name,
                 'representative_name' => $company->representative_name,
                 'address' => $company->address,
+                'invoice_registration_number' => $company->invoice_registration_number,
                 'consumption_tax_method' => ($company->consumption_tax_method ?? ConsumptionTaxMethod::Standard)->value,
                 'simplified_tax_industry' => $company->simplified_tax_industry?->value,
             ],

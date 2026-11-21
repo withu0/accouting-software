@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdvanceExpenseController;
 use App\Http\Controllers\BankImportController;
 use App\Http\Controllers\CreditCardImportController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\JournalController;
 use App\Http\Controllers\OpeningBalanceController;
 use App\Http\Controllers\ReceiptScanController;
@@ -50,6 +51,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('receipt-scans', [ReceiptScanController::class, 'store'])
         ->middleware('throttle:30,1')
         ->name('receipt-scans.store');
+
+    Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+    Route::get('invoices/create', [InvoiceController::class, 'create'])->name('invoices.create');
+    Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+    Route::get('invoices/{invoice}/edit', [InvoiceController::class, 'edit'])->name('invoices.edit');
+    Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');
+    Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
+    Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
 
     Route::get('reports', [ReportController::class, 'index'])->name('reports');
     Route::put('reports/equity', [ReportController::class, 'updateEquity'])->name('reports.equity.update');

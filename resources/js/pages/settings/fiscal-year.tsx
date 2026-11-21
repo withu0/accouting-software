@@ -68,7 +68,7 @@ export default function FiscalYearSettings({
     consumptionTaxMethods,
     simplifiedTaxIndustries,
 }: Props) {
-    const { auth } = usePage<SharedData>().props;
+    const { auth, errors: pageErrors } = usePage<SharedData & { errors?: Record<string, string> }>().props;
     const isTaxExempt = auth.company?.tax_entity_status === 'exempt';
     const isUpdate = activeFiscalYear !== null;
 
@@ -76,9 +76,11 @@ export default function FiscalYearSettings({
         name: company.name ?? '',
         representative_name: company.representative_name ?? '',
         address: company.address ?? '',
+        invoice_registration_number: company.invoice_registration_number ?? '',
         consumption_tax_method: company.consumption_tax_method ?? 'standard',
         simplified_tax_industry: company.simplified_tax_industry ?? '',
     });
+    const registrationError = companyForm.errors.invoice_registration_number ?? pageErrors?.invoice_registration_number;
 
     const fiscalYearForm = useForm({
         start_date: activeFiscalYear ? toDateInputValue(activeFiscalYear.start_date) : '',
@@ -119,18 +121,11 @@ export default function FiscalYearSettings({
 
                 <FlashAlert />
 
-                <FormSection
-                    title="会社情報"
-                    description="決算書PDFのヘッダーに表示される会社名・住所・代表者名を設定します。"
-                >
+                <FormSection title="会社情報" description="決算書と適格請求書に表示される会社名・住所・代表者名・登録番号を設定します。">
                     <form onSubmit={submitCompany} className="space-y-4">
                         <div className="grid gap-2">
                             <Label htmlFor="name">会社名</Label>
-                            <Input
-                                id="name"
-                                value={companyForm.data.name}
-                                onChange={(e) => companyForm.setData('name', e.target.value)}
-                            />
+                            <Input id="name" value={companyForm.data.name} onChange={(e) => companyForm.setData('name', e.target.value)} />
                             <InputError message={companyForm.errors.name} />
                         </div>
 
@@ -153,6 +148,22 @@ export default function FiscalYearSettings({
                                 placeholder="東京都千代田区..."
                             />
                             <InputError message={companyForm.errors.address} />
+                        </div>
+
+                        <div className="grid gap-2">
+                            <Label htmlFor="invoice_registration_number">適格請求書の登録番号</Label>
+                            <Input
+                                id="invoice_registration_number"
+                                value={companyForm.data.invoice_registration_number}
+                                onChange={(e) => companyForm.setData('invoice_registration_number', e.target.value)}
+                                placeholder="T1234567890123"
+                                maxLength={14}
+                                className="font-mono"
+                            />
+                            <p className="text-muted-foreground text-xs">
+                                請求書PDFに記載します。Tのあとに数字13桁です。未設定のままではPDFを出力できません。
+                            </p>
+                            <InputError message={registrationError} />
                         </div>
 
                         {!isTaxExempt && (
@@ -233,10 +244,7 @@ export default function FiscalYearSettings({
                     </StatCard>
                 )}
 
-                <FormSection
-                    title="会計期間"
-                    description="会計年度の開始日と終了日を設定します。仕訳はこの期間内の日付のみ登録できます。"
-                >
+                <FormSection title="会計期間" description="会計年度の開始日と終了日を設定します。仕訳はこの期間内の日付のみ登録できます。">
                     <form onSubmit={submitFiscalYear} className="space-y-6">
                         <div className="grid gap-2">
                             <Label htmlFor="start_date">開始日</Label>
@@ -279,9 +287,7 @@ export default function FiscalYearSettings({
                         </div>
                     </form>
 
-                    {fiscalYears.length > 1 && (
-                        <p className="text-muted-foreground text-sm">登録済みの会計期間: {fiscalYears.length} 件</p>
-                    )}
+                    {fiscalYears.length > 1 && <p className="text-muted-foreground text-sm">登録済みの会計期間: {fiscalYears.length} 件</p>}
                 </FormSection>
 
                 {activeFiscalYear && yearEndPreview && (
@@ -309,9 +315,7 @@ export default function FiscalYearSettings({
                             {yearEndPreview.has_next_period_journals && (
                                 <Alert>
                                     <AlertCircle className="size-4" />
-                                    <AlertDescription>
-                                        翌期にすでに仕訳があります。開始残高を更新すると翌期の現在残高も変わります。
-                                    </AlertDescription>
+                                    <AlertDescription>翌期にすでに仕訳があります。開始残高を更新すると翌期の現在残高も変わります。</AlertDescription>
                                 </Alert>
                             )}
 

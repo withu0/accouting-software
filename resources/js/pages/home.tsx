@@ -7,7 +7,7 @@ import { WorkflowSteps, bankImportSteps } from '@/components/workflow-steps';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Building2, CalendarDays, CreditCard, FileText, Settings, Upload, Wallet } from 'lucide-react';
+import { Building2, CalendarDays, CreditCard, FileText, ScrollText, Settings, Upload, Wallet } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -34,6 +34,12 @@ const menuItems = [
         description: '社長個人が支払った経費を登録します',
         href: route('advance-expenses'),
         icon: Wallet,
+    },
+    {
+        title: '請求書',
+        description: '登録番号・税率・消費税額を記載した適格請求書を出力します',
+        href: route('invoices.index'),
+        icon: ScrollText,
     },
     {
         title: '決算書出力',
@@ -87,23 +93,14 @@ export default function Home() {
                         title="メニュー"
                         description="よく使う機能へのショートカット"
                         actions={
-                            <Link
-                                href={route('bank-import')}
-                                className="text-primary text-sm font-medium hover:underline"
-                            >
+                            <Link href={route('bank-import')} className="text-primary text-sm font-medium hover:underline">
                                 銀行CSV取込を始める →
                             </Link>
                         }
                     />
                     <div className="grid gap-4 sm:grid-cols-2">
                         {menuItems.map((item) => (
-                            <FeatureCard
-                                key={item.title}
-                                title={item.title}
-                                description={item.description}
-                                href={item.href}
-                                icon={item.icon}
-                            />
+                            <FeatureCard key={item.title} title={item.title} description={item.description} href={item.href} icon={item.icon} />
                         ))}
                     </div>
                 </section>
