@@ -53,17 +53,17 @@ class InvoiceTest extends TestCase
                 ->component('invoices/form')
                 ->where('registrationNumber', 'T1234567890123')
                 ->where('invoice.invoice_number', '20260001')
+                ->where('invoice.lines.0.transaction_date', '2026-03-15')
             );
 
         $this->assertSame('20260001', $invoice->invoice_number);
         $this->assertSame('株式会社サンプル', $invoice->customer_name);
         $this->assertDatabaseCount('journal_entries', 0);
-        $this->assertDatabaseHas('invoice_lines', [
-            'invoice_id' => $invoice->id,
-            'description' => 'コンサルティング',
-            'tax_rate' => '10',
-            'unit_price' => 1005,
-        ]);
+        $consulting = $invoice->lines()->where('description', 'コンサルティング')->first();
+        $this->assertNotNull($consulting);
+        $this->assertSame('2026-03-15', $consulting->transaction_date->toDateString());
+        $this->assertSame('10', $consulting->tax_rate->value);
+        $this->assertSame(1005, $consulting->unit_price);
         $this->assertDatabaseHas('invoice_lines', [
             'invoice_id' => $invoice->id,
             'description' => '食品',
@@ -122,6 +122,8 @@ class InvoiceTest extends TestCase
         $this->assertStringContainsString('T1234567890123', $html);
         $this->assertStringContainsString('テスト株式会社', $html);
         $this->assertStringContainsString('株式会社サンプル', $html);
+        $this->assertStringContainsString('取引日', $html);
+        $this->assertStringContainsString('2026年3月15日', $html);
         $this->assertStringContainsString('2026年4月1日', $html);
         $this->assertStringContainsString('10%', $html);
         $this->assertStringContainsString('8% 軽', $html);
@@ -193,18 +195,21 @@ class InvoiceTest extends TestCase
             'notes' => 'お振込期限は発行日の月末です。',
             'lines' => [
                 [
+                    'transaction_date' => '2026-03-15',
                     'description' => 'コンサルティング',
                     'quantity' => 1,
                     'unit_price' => 1005,
                     'tax_rate' => '10',
                 ],
                 [
+                    'transaction_date' => $issueDate,
                     'description' => '追加作業',
                     'quantity' => 1,
                     'unit_price' => 1005,
                     'tax_rate' => '10',
                 ],
                 [
+                    'transaction_date' => $issueDate,
                     'description' => '食品',
                     'quantity' => 2,
                     'unit_price' => 1000,

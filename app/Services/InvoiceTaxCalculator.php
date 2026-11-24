@@ -30,6 +30,7 @@ class InvoiceTaxCalculator
             $amount = $quantity * $unitPrice;
 
             $prepared[] = [
+                'transaction_date' => (string) ($line['transaction_date'] ?? ''),
                 'description' => (string) ($line['description'] ?? ''),
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,

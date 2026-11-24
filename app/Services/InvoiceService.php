@@ -67,7 +67,7 @@ class InvoiceService
     }
 
     /**
-     * @param  list<array{description: string, quantity: int, unit_price: int, tax_rate: string}>  $lines
+     * @param  list<array{transaction_date: string, description: string, quantity: int, unit_price: int, tax_rate: string}>  $lines
      */
     private function replaceLines(Invoice $invoice, array $lines): void
     {
@@ -76,6 +76,7 @@ class InvoiceService
         foreach (array_values($lines) as $index => $line) {
             $invoice->lines()->create([
                 'line_no' => $index + 1,
+                'transaction_date' => $line['transaction_date'],
                 'description' => $line['description'],
                 'quantity' => (int) $line['quantity'],
                 'unit_price' => (int) $line['unit_price'],

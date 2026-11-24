@@ -27,6 +27,7 @@ class QualifiedInvoiceDocument
         return $this->calculator->calculate(
             $invoice->lines
                 ->map(fn (InvoiceLine $line) => [
+                    'transaction_date' => $line->transaction_date?->toDateString() ?? '',
                     'description' => $line->description,
                     'quantity' => $line->quantity,
                     'unit_price' => $line->unit_price,

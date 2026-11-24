@@ -11,6 +11,7 @@ class InvoiceLine extends Model
     protected $fillable = [
         'invoice_id',
         'line_no',
+        'transaction_date',
         'description',
         'quantity',
         'unit_price',
@@ -21,6 +22,7 @@ class InvoiceLine extends Model
     {
         return [
             'line_no' => 'integer',
+            'transaction_date' => 'date',
             'quantity' => 'integer',
             'unit_price' => 'integer',
             'tax_rate' => InvoiceTaxRate::class,

@@ -19,6 +19,7 @@ import { AlertCircle, Trash2 } from 'lucide-react';
 import { FormEvent, useMemo } from 'react';
 
 interface InvoiceLineValues {
+    transaction_date: string;
     description: string;
     quantity: number;
     unit_price: number;
@@ -48,8 +49,8 @@ function today(): string {
     return `${now.getFullYear()}-${month}-${day}`;
 }
 
-function blankLine(): InvoiceLineValues {
-    return { description: '', quantity: 1, unit_price: 0, tax_rate: '10' };
+function blankLine(transactionDate: string): InvoiceLineValues {
+    return { transaction_date: transactionDate, description: '', quantity: 1, unit_price: 0, tax_rate: '10' };
 }
 
 export default function InvoiceForm({ invoice, registrationNumber, companyName }: Props) {
@@ -66,12 +67,13 @@ export default function InvoiceForm({ invoice, registrationNumber, companyName }
         notes: invoice?.notes ?? '',
         lines: invoice?.lines.length
             ? invoice.lines.map((line) => ({
+                  transaction_date: line.transaction_date,
                   description: line.description,
                   quantity: line.quantity,
                   unit_price: line.unit_price,
                   tax_rate: line.tax_rate,
               }))
-            : [blankLine()],
+            : [blankLine(today())],
     });
 
     const summary = useMemo(() => calculateInvoiceTax(form.data.lines), [form.data.lines]);
@@ -83,6 +85,7 @@ export default function InvoiceForm({ invoice, registrationNumber, companyName }
         form.transform((data) => ({
             ...data,
             lines: data.lines.map((line) => ({
+                transaction_date: line.transaction_date,
                 description: line.description,
                 quantity: Math.trunc(Number(line.quantity)) || 0,
                 unit_price: Math.trunc(Number(line.unit_price)) || 0,
@@ -195,6 +198,7 @@ export default function InvoiceForm({ invoice, registrationNumber, companyName }
                         <DataTable>
                             <DataTableHeader>
                                 <TableRow>
+                                    <TableHead className="w-40">取引日</TableHead>
                                     <TableHead>取引内容</TableHead>
                                     <TableHead className="w-24">数量</TableHead>
                                     <TableHead className="w-36">単価（税抜）</TableHead>
@@ -206,6 +210,16 @@ export default function InvoiceForm({ invoice, registrationNumber, companyName }
                             <TableBody>
                                 {form.data.lines.map((line, index) => (
                                     <TableRow key={index}>
+                                        <TableCell>
+                                            <Input
+                                                type="date"
+                                                value={line.transaction_date}
+                                                onChange={(event) => updateLine(index, { transaction_date: event.target.value })}
+                                                aria-label={`取引日 ${index + 1}`}
+                                                required
+                                            />
+                                            <InputError message={errors[`lines.${index}.transaction_date`]} />
+                                        </TableCell>
                                         <TableCell>
                                             <Input
                                                 value={line.description}
@@ -284,7 +298,7 @@ export default function InvoiceForm({ invoice, registrationNumber, companyName }
                             variant="outline"
                             className="mt-4"
                             disabled={form.data.lines.length >= 30}
-                            onClick={() => form.setData('lines', [...form.data.lines, blankLine()])}
+                            onClick={() => form.setData('lines', [...form.data.lines, blankLine(form.data.issue_date || today())])}
                         >
                             明細を追加
                         </Button>

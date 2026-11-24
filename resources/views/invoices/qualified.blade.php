@@ -57,16 +57,18 @@
     <table class="lines">
         <thead>
             <tr>
-                <th style="width: 46%;">取引内容</th>
-                <th style="width: 10%;">数量</th>
-                <th style="width: 16%;">単価（税抜）</th>
+                <th style="width: 18%;">取引日</th>
+                <th style="width: 34%;">取引内容</th>
+                <th style="width: 8%;">数量</th>
+                <th style="width: 14%;">単価（税抜）</th>
                 <th style="width: 12%;">税率</th>
-                <th style="width: 16%;">金額（税抜）</th>
+                <th style="width: 14%;">金額（税抜）</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($summary['lines'] as $line)
                 <tr>
+                    <td class="text-center">{{ $line['transaction_date'] !== '' ? \App\Support\JapaneseDateFormatter::western(\Illuminate\Support\Carbon::parse($line['transaction_date'])) : '' }}</td>
                     <td>{{ $line['description'] }}</td>
                     <td class="text-right">{{ number_format($line['quantity']) }}</td>
                     <td class="text-right">{{ \App\Support\Yen::format($line['unit_price']) }}</td>
